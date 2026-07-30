@@ -1,0 +1,49 @@
+# Fins de ligne — ce fichier n'est pas cosmétique.
+#
+# POURQUOI IL EXISTE : les scripts .bat DOIVENT être en CRLF dans la copie
+# de travail. cmd.exe analyse un .bat en LF de travers — il mange le
+# premier caractère de certaines lignes (« setlocal » devient « etlocal »,
+# « if not exist » ne s'exécute plus) et le script échoue avec des erreurs
+# incompréhensibles. Le bug a réellement été rencontré sur ce projet.
+#
+# Sans consigne explicite, le résultat dépend du réglage core.autocrlf de
+# chaque machine : le dépôt fonctionnerait chez l'un et pas chez l'autre.
+# Ici, la règle est écrite une fois pour toutes et voyage avec le code.
+
+# Par défaut : LF dans le dépôt ET dans la copie de travail.
+#
+# Le « eol=lf » est important : sans lui, les fichiers non listés plus bas
+# (ceux sans extension, comme .gitignore) restaient soumis au réglage
+# core.autocrlf de chaque machine — d'où l'avertissement « LF will be
+# replaced by CRLF », que Visual Studio Code présente dans une fenêtre au
+# style « erreur » alors que Git n'a rien refusé. Ici, plus rien n'est
+# laissé à la configuration locale : le dépôt décide.
+* text=auto eol=lf
+
+# --- Scripts Windows : CRLF OBLIGATOIRE (voir plus haut) ---------------
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# --- Code et documents : LF partout, sur toutes les plateformes --------
+*.cpp  text eol=lf
+*.h    text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
+*.txt  text eol=lf
+
+# --- Binaires : jamais convertis, jamais fusionnés ---------------------
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.zip  binary
+*.epub binary
+*.dic  binary
+*.aff  binary
+*.dat  binary
+
+# --- Fichiers tiers : exclus des statistiques de langage du dépôt ------
+# json.hpp est une bibliothèque externe d'un mégaoctet ; sans cette ligne,
+# GitHub présenterait le projet comme majoritairement « du code d'autrui ».
+Bridge/json.hpp linguist-vendored

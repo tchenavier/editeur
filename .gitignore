@@ -1,0 +1,31 @@
+# Dépendances récupérées par scripts/fetch_deps.bat (non versionnées :
+# elles sont épinglées dans le script et retéléchargeables à l'identique).
+# Contient aussi les dictionnaires du correcteur, soit 6 Mo de données.
+third_party/
+
+# Sorties de compilation (application et tests).
+build/
+*.obj
+*.exe
+*.pdb
+*.ilk
+
+# État local de Visual Studio : bases de données, index de complétion.
+.vs/
+
+# Archive source de la bibliothèque JSON : seul Bridge/json.hpp en est
+# extrait et versionné.
+json-develop.zip
+
+# Résidus de redirections de shell ratées (« > tests » au lieu de « >nul »).
+# ATTENTION à « nul » : c'est un nom de périphérique réservé sous Windows.
+# Un dépôt qui le contient devient IMPOSSIBLE à cloner sous Windows.
+/nul
+/ASan
+/compilation
+/execution
+/tests
+
+# Documents de cadrage et de suivi (PDF)
+/Projet_Editeur_de_texte_-_Etat_du_projet.pdf
+/Projet_Editeur_de_texte.pdf
