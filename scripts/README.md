@@ -224,8 +224,11 @@ une passe de fond (avant une diffusion, par exemple) :
 scripts\fuzz_long.bat 2000000
 ```
 
-Compter ~1 ms par entrée sous AddressSanitizer, soit une trentaine de minutes
-pour deux millions. La **graine** est affichée au démarrage et rappelée en cas
+Compter ~2 ms par entrée sous AddressSanitizer, soit un peu plus d'une heure
+pour deux millions — **chiffre mesuré, à remesurer dès qu'un analyseur rejoint
+le fuzzer** : l'arrivée de la comparaison et du redécoupage a fait passer le
+coût de 1,5 à 3,4 ms avant qu'on ne les limite à une itération sur quatre. La
+**graine** est affichée au démarrage et rappelée en cas
 d'incident : c'est elle qui rend un plantage reproductible
 (`build\security\fuzz.exe <itérations> <graine>`, depuis un invite *x64 Native
 Tools* — sinon la DLL d'ASan reste introuvable et le programme s'arrête
@@ -257,10 +260,23 @@ dumpbin /headers build\editeur.exe
 (doit mentionner *Control Flow Guard*, *Dynamic base*, *NX compatible* et
 *High Entropy Virtual Addresses*).
 
-**Piège des scripts `.bat`** : jamais de parenthèses dans un message à
+**Pièges des scripts `.bat`**
+
+*Parenthèses dans les messages.* Jamais de parenthèses dans un message à
 l'intérieur d'un bloc `if ( ... )` — `cmd` prend la parenthèse fermante du
 message pour la fin du bloc, et le script casse à l'analyse, même quand la
 condition est fausse.
+
+*Ne jamais modifier un `.bat` pendant qu'il tourne.* `cmd` ne charge pas le
+script en mémoire : il relit le fichier **à chaque commande**, en repartant
+d'une position mémorisée en octets. Modifier le fichier pendant l'exécution
+décale cette position, et `cmd` reprend au milieu d'une ligne — il exécute
+alors n'importe quoi et affiche des erreurs sans rapport. Rencontré pour de
+vrai : une campagne de fuzzing de deux heures s'est terminée sur
+`*** ECHEC de compilation ***` alors qu'elle avait parfaitement réussi, parce
+que le commentaire d'en-tête du script avait été corrigé entre-temps. Le
+résultat était bon, le compte rendu faux. **Attendre la fin, ou éditer une
+copie.**
 
 ## Suites de tests
 

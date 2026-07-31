@@ -266,8 +266,15 @@ int main(int argc, char** argv) {
         //    caractère au mauvais endroit fait sortir des bornes. Le
         //    redécoupage, lui, reçoit deux documents sans aucun rapport —
         //    il doit rendre quelque chose plutôt que de s'égarer.
-        {
-            (void)core::splitSentences(u32);
+        //
+        //    Le découpage en phrases, lui, passe à CHAQUE tour : il est
+        //    bon marché, et c'est celui qui inspecte le plus finement les
+        //    caractères. Le reste — alignements de mots, deux documents à
+        //    analyser — coûte assez pour doubler la durée d'une campagne :
+        //    une itération sur quatre suffit, comme pour les
+        //    dictionnaires plus bas.
+        (void)core::splitSentences(u32);
+        if (i % 4 == 0) {
             (void)core::tokenizeWords(u32);
             (void)core::diffText(u32, u32.substr(0, u32.size() / 2));
 

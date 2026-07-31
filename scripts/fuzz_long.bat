@@ -13,8 +13,11 @@ REM      scripts\fuzz_long.bat                  REM 2 000 000, graine du jour
 REM      scripts\fuzz_long.bat 5000000          REM nombre choisi
 REM      scripts\fuzz_long.bat 5000000 987      REM nombre + graine
 REM
-REM  Compter environ 1,5 ms par entrée (ASan ralentit beaucoup, c'est le
-REM  prix de la détection) : 2 000 000 d'entrées ≈ 50 minutes.
+REM  Compter environ 2 ms par entrée (ASan ralentit beaucoup, c'est le
+REM  prix de la détection) : 2 000 000 d'entrées ≈ 70 minutes. Mesuré, pas
+REM  estimé — et à REMESURER quand on ajoute un analyseur au fuzzer :
+REM  l'arrivée de la comparaison et du redécoupage a fait passer le coût
+REM  de 1,5 à 3,4 ms avant qu'on ne les limite à une itération sur quatre.
 REM
 REM  EN CAS DE PLANTAGE : la graine est affichée au démarrage et rappelée
 REM  à la fin. Rejouer EXACTEMENT la même séquence avec :
