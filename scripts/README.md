@@ -279,9 +279,11 @@ condition est fausse.
 | `test_speller` | Règles d'affixes, formes fléchies, correction, synonymes |
 | `test_utils` | Empreinte SHA-256 (vecteurs officiels) et identifiants de projet |
 | `test_project` | Inventaire du projet et journal des modifications |
+| `test_diff` | Alignement de deux versions, découpage en phrases |
+| `test_reflow` | Redécoupage d'un texte aplati d'après une version de référence |
 | `test_bridge` | Le pont de bout en bout : toutes les commandes |
 
-14 suites, 132 cas, sans framework externe.
+16 suites, 152 cas, sans framework externe.
 
 ---
 

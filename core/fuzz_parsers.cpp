@@ -32,11 +32,13 @@
 #include "CardIO.h"
 #include "CardModel.h"
 #include "ChangeLog.h"
+#include "Diff.h"
 #include "Epub.h"
 #include "Speller.h"
 #include "Thesaurus.h"
 #include "MarkdownIO.h"
 #include "ProjectIndex.h"
+#include "Reflow.h"
 #include "Sha256.h"
 #include "TextModel.h"
 #include "Utf8.h"
@@ -256,6 +258,23 @@ int main(int argc, char** argv) {
             doc.moveBlocks(randomPos(doc.blocks().size() + 2),
                            randomPos(doc.blocks().size() + 2),
                            randomPos(doc.blocks().size() + 2));
+        }
+
+        // 5 bis. COMPARAISON et REDÉCOUPAGE. Le découpage en phrases
+        //    regarde en avant et en arrière du point courant (fermetures,
+        //    abréviations) : c'est exactement le genre de code où un
+        //    caractère au mauvais endroit fait sortir des bornes. Le
+        //    redécoupage, lui, reçoit deux documents sans aucun rapport —
+        //    il doit rendre quelque chose plutôt que de s'égarer.
+        {
+            (void)core::splitSentences(u32);
+            (void)core::tokenizeWords(u32);
+            (void)core::diffText(u32, u32.substr(0, u32.size() / 2));
+
+            core::Document autre = io::parse(raw.substr(0, raw.size() / 2) + raw);
+            (void)core::flatness(doc.blocks());
+            (void)core::reflowLike(doc.blocks(), autre.blocks());
+            (void)core::reflowLike(autre.blocks(), doc.blocks());
         }
 
         // 6. Chaîne d'EXPORT (Phase 4). Le contenu qui la traverse vient

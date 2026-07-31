@@ -926,7 +926,7 @@ int main() {
 
         core::UndoManager undo7;
         bridge::Bridge b7;
-        bridge::CompareApi compareApi(courant);
+        bridge::CompareApi compareApi(courant, undo7);
         assert(compareApi.registerOn(b7));
         assert(!compareApi.registerOn(b7)); // doublon refusé
 
@@ -961,8 +961,9 @@ int main() {
         // Comparer un document à lui-même ne montre aucune différence.
         {
             core::Document copie = courant;
+            core::UndoManager undo8;
             bridge::Bridge b8;
-            bridge::CompareApi memeApi(copie);
+            bridge::CompareApi memeApi(copie, undo8);
             assert(memeApi.registerOn(b8));
             std::string err;
             const auto meme = dossier / "identique.md";
@@ -976,8 +977,100 @@ int main() {
         assert(call(b7, "compare.withFile", {{"path", "zzz_absent.md"}})["ok"] == false);
         assert(call(b7, "compare.withFile", {})["ok"] == false);
 
+        // L'unité de comparaison retenue et l'état de la structure sont
+        // annoncés : ici deux versions bien découpées, donc paragraphes.
+        assert(res["structure"]["unit"] == "block");
+        assert(res["structure"]["flattened"] == "none");
+
         std::filesystem::remove_all(dossier, ec);
         std::cout << "Test 23 OK (comparaison de versions via le pont)\n";
+    }
+
+    // --- Test 24 : version rendue d'un seul tenant par un correcteur ---
+    //
+    // LE cas qui a motivé tout ceci : le texte revient corrigé mais sans
+    // aucun paragraphe. Deux choses doivent alors se produire — la
+    // comparaison bascule sur les phrases (sinon tout ressort comme
+    // réécrit), et le redécoupage rend sa structure au manuscrit.
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_aplati";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+        const auto ancien = dossier / "avant_correction.md";
+
+        {
+            core::Document reference;
+            reference.metadata().title = "Roman";
+            auto ajoute = [&reference](core::BlockType type, const std::u32string& texte) {
+                core::TextBlock block(type);
+                block.insertText(0, texte);
+                reference.blocks().push_back(block);
+            };
+            ajoute(core::BlockType::Heading1, U"Acte I");
+            ajoute(core::BlockType::Paragraph,
+                   U"Le vent hurlait contre les remparts. Regina veillait.");
+            ajoute(core::BlockType::Paragraph,
+                   U"Elle rêvait de forêts. Personne ne le savait.");
+            ajoute(core::BlockType::Paragraph, U"— Je pars, dit-elle.");
+            std::string err;
+            assert(io::saveToFile(reference, ancien, &err));
+        }
+
+        // Ce que rend le correcteur : tout d'un bloc, un mot corrigé.
+        core::Document aplati;
+        aplati.metadata().title = "Roman";
+        {
+            core::TextBlock block(core::BlockType::Paragraph);
+            block.insertText(0, U"Acte I Le vent soufflait contre les remparts. "
+                                U"Regina veillait. Elle rêvait de forêts. "
+                                U"Personne ne le savait. — Je pars, dit-elle.");
+            aplati.blocks().push_back(block);
+        }
+
+        core::UndoManager undo9;
+        bridge::Bridge b9;
+        bridge::EditorApi editeur9(aplati, undo9);
+        bridge::CompareApi compare9(aplati, undo9);
+        assert(editeur9.registerOn(b9));
+        assert(compare9.registerOn(b9));
+
+        auto vue = call(b9, "compare.withFile", {{"path", ancien.string()}})["result"];
+        // Un bloc unique face à quatre : l'appariement des paragraphes ne
+        // retrouve rien, la comparaison bascule sur les phrases.
+        assert(vue["structure"]["unit"] == "sentence");
+        assert(vue["structure"]["flattened"] == "right");
+        // Et là, l'essentiel du texte est reconnu comme inchangé.
+        assert(vue["stats"]["equal"] >= 3);
+        assert(vue["stats"]["changed"] == 1); // la phrase corrigée, seule
+
+        // Redécoupage : la structure du fichier de référence est rendue au
+        // manuscrit, titre compris, sans toucher à la correction.
+        auto refait = call(b9, "compare.reparagraph", {{"path", ancien.string()}});
+        assert(refait["ok"] == true);
+        assert(refait["result"]["changed"] == true);
+        assert(refait["result"]["count"] == 4);
+        assert(aplati.blocks().size() == 4);
+
+        const auto& blocs = refait["result"]["blocks"];
+        assert(blocs.size() == 4);
+        assert(blocs[0]["type"] == "h1"); // le titre a retrouvé son niveau
+        assert(blocs[0]["text"] == "Acte I");
+        assert(blocs[1]["text"] == "Le vent soufflait contre les remparts. Regina veillait.");
+        assert(blocs[3]["text"] == "— Je pars, dit-elle.");
+
+        // Une fois le manuscrit découpé, l'opération se refuse : elle
+        // remplacerait la structure de l'auteur par celle d'un autre.
+        assert(call(b9, "compare.reparagraph", {{"path", ancien.string()}})["ok"] == false);
+
+        // Et elle s'annule comme n'importe quelle étape.
+        assert(call(b9, "editor.undo", {})["ok"] == true);
+        assert(aplati.blocks().size() == 1);
+
+        assert(call(b9, "compare.reparagraph", {{"path", "zzz_absent.md"}})["ok"] == false);
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 24 OK (texte aplati : comparaison par phrases, redecoupage)\n";
     }
 
     std::cout << "Tous les tests du pont sont passes.\n";

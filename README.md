@@ -43,6 +43,13 @@ Analyse de cohérence : liens cassés, fiches jamais mentionnées, et
 **personnages morts réapparus** — toute mention après le chapitre de décès passe
 en rouge.
 
+**Relire.** Comparaison de deux versions côte à côte, qui ignore le style et
+absorbe les décalages : insérer un mot ne fait pas passer tout le reste du
+paragraphe pour modifié. Et si un correcteur extérieur a rendu le texte **d'un
+seul tenant**, paragraphes perdus, l'éditeur le voit, compare alors phrase par
+phrase, et sait **rendre au manuscrit le découpage de la version précédente**,
+titres compris, sans toucher au texte corrigé.
+
 **Publier.** Export PDF par le moteur de rendu du système (page de titre,
 couverture, table des matières, saut de page par chapitre) et export EPUB
 construit intégralement. La bible narrative s'exporte aussi, seule.
@@ -101,13 +108,13 @@ que `core/` tient sans `io/`, et `io/` sans le pont.
 
 ## Qualité
 
-**14 suites, 132 cas de tests** sans framework externe, et un audit de sécurité
+**16 suites, 152 cas de tests** sans framework externe, et un audit de sécurité
 reproductible en six étapes : compilation stricte (avertissements traités comme
 des erreurs), détecteur d'erreurs mémoire, fuzzing, fuites mémoire sur toutes
 les couches, analyse statique. Tout au vert.
 
 ```bat
-scripts\build_tests.bat        REM les 14 suites
+scripts\build_tests.bat        REM les 16 suites
 scripts\security_audit.bat     REM les 6 vérifications
 scripts\fuzz_long.bat          REM campagne de fuzzing longue
 ```

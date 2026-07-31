@@ -33,6 +33,71 @@ char32_t normalize(char32_t c) {
     }
 }
 
+// --- Découpage en phrases : les quelques tests de caractères -----------
+
+bool isTerminator(char32_t c) {
+    return c == U'.' || c == U'!' || c == U'?' || c == U'…';
+}
+
+// Signes qui appartiennent encore à la phrase qui se termine : la
+// fermeture vient APRÈS le point dans « … dit-il. » » et « (…). ».
+bool isClosingMark(char32_t c) {
+    return c == U'»' || c == U'"' || c == U'”' || c == U'’' || c == U'\'' ||
+           c == U')' || c == U']';
+}
+
+// Majuscule, au sens utile ici : latin de base et lettres accentuées
+// françaises. Sert à reconnaître un début de phrase, jamais à transformer
+// du texte — inutile d'aller chercher une table Unicode complète.
+bool isUpperLetter(char32_t c) {
+    if (c >= U'A' && c <= U'Z') return true;
+    if (c >= 0x00C0 && c <= 0x00DE && c != 0x00D7) return true; // À..Þ sauf ×
+    return c == 0x0152 /* Œ */ || c == 0x0178 /* Ÿ */;
+}
+
+// Ce par quoi une phrase peut commencer. Une MINUSCULE n'en fait pas
+// partie : après un point, elle signale presque toujours une abréviation
+// que la liste ci-dessous n'a pas prévue — mieux vaut alors ne pas couper.
+bool canStartSentence(char32_t c) {
+    if (isUpperLetter(c)) return true;
+    if (c >= U'0' && c <= U'9') return true;
+    return c == U'«' || c == U'"' || c == U'“' || c == U'—' || c == U'–' ||
+           c == U'-' || c == U'(' || c == U'[' || c == U'…';
+}
+
+// Abréviations après lesquelles un point suivi d'une majuscule n'ouvre pas
+// une phrase : ce sont celles qui précèdent un nom propre ou un nombre.
+// « etc. » n'y figure pas volontairement — suivi d'une majuscule, il
+// termine bel et bien la phrase.
+bool isAbbreviation(const std::u32string& text, size_t dotIndex) {
+    // Le mot qui précède le point, en minuscules et sans accents utiles
+    // ici (les abréviations visées n'en portent pas, sauf « éd. » et
+    // « réf. » traitées telles quelles).
+    size_t start = dotIndex;
+    while (start > 0 && isWordChar(text[start - 1])) --start;
+    if (start == dotIndex) return false;
+
+    std::u32string word = text.substr(start, dotIndex - start);
+    for (char32_t& c : word) {
+        if (c >= U'A' && c <= U'Z') c = static_cast<char32_t>(c - U'A' + U'a');
+    }
+
+    // Initiale isolée : « J. R. R. Tolkien ».
+    if (word.size() == 1 && isUpperLetter(text[start])) return true;
+
+    static const char32_t* const kAbbreviations[] = {
+        U"m", U"mm", U"mme", U"mmes", U"mlle", U"mlles", U"me", U"mgr",
+        U"dr", U"drs", U"pr", U"st", U"ste", U"sts", U"stes",
+        U"cf", U"env", U"art", U"chap", U"vol", U"fig", U"no", U"nos",
+        U"av", U"apr", U"éd", U"réf", U"tél", U"p", U"pp", U"ex",
+        U"ibid", U"op", U"al", U"jc",
+    };
+    for (const char32_t* candidate : kAbbreviations) {
+        if (word == candidate) return true;
+    }
+    return false;
+}
+
 uint64_t hashRange(const std::u32string& text, size_t start, size_t end,
                    bool collapseSpaces) {
     uint64_t h = 14695981039346656037ull; // FNV-1a
@@ -230,6 +295,14 @@ std::vector<DiffOp> mergeOps(const std::vector<DiffOp>& ops) {
 // Interface publique
 // ---------------------------------------------------------------------
 
+bool isSpaceChar(char32_t c) {
+    // Les insécables sont désignées par leur point de code plutôt que par
+    // le caractère lui-même : à l'œil nu, rien ne les distingue d'une
+    // espace ordinaire dans le code source.
+    return c == U' ' || c == U'\t' || c == U'\n' || c == U'\r' ||
+           c == 0x00A0 /* insécable */ || c == 0x202F /* insécable étroite */;
+}
+
 std::vector<WordSpan> tokenizeWords(const std::u32string& text) {
     std::vector<WordSpan> words;
     size_t i = 0;
@@ -240,6 +313,71 @@ std::vector<WordSpan> tokenizeWords(const std::u32string& text) {
         words.push_back({start, i - start});
     }
     return words;
+}
+
+std::vector<WordSpan> splitSentences(const std::u32string& text) {
+    std::vector<WordSpan> sentences;
+    const size_t n = text.size();
+
+    // Ferme la phrase en cours sur [start, end), espaces du bord retirés.
+    auto emit = [&](size_t start, size_t end) {
+        while (start < end && isSpaceChar(text[start])) ++start;
+        while (end > start && isSpaceChar(text[end - 1])) --end;
+        if (start < end) sentences.push_back({start, end - start});
+    };
+
+    size_t start = 0;
+    size_t i = 0;
+    while (i < n) {
+        if (!isTerminator(text[i])) { ++i; continue; }
+
+        // Un point entre deux chiffres appartient au nombre (« 3.14 ») :
+        // il ne peut pas terminer une phrase.
+        if (text[i] == U'.' && i > 0 && i + 1 < n &&
+            text[i - 1] >= U'0' && text[i - 1] <= U'9' &&
+            text[i + 1] >= U'0' && text[i + 1] <= U'9') {
+            ++i;
+            continue;
+        }
+
+        const size_t dot = i;
+        size_t end = i;
+        while (end < n && isTerminator(text[end])) ++end; // « ?! », « ... »
+
+        // Fermetures : elles appartiennent encore à la phrase qui
+        // s'achève — « ." », « .) », et la variante française où une
+        // espace précède le guillemet fermant : « Au feu ! »
+        for (;;) {
+            if (end < n && isClosingMark(text[end])) { ++end; continue; }
+            size_t after = end;
+            while (after < n && isSpaceChar(text[after])) ++after;
+            if (after < n && (text[after] == U'»' || text[after] == U'”')) {
+                end = after + 1;
+                continue;
+            }
+            break;
+        }
+
+        if (end >= n) break; // fin du texte : la phrase se ferme plus bas
+
+        if (!isSpaceChar(text[end])) { i = end; continue; }
+
+        size_t next = end;
+        while (next < n && isSpaceChar(text[next])) ++next;
+        if (next >= n) break;
+
+        if (canStartSentence(text[next]) &&
+            !(text[dot] == U'.' && isAbbreviation(text, dot))) {
+            emit(start, end);
+            start = next;
+            i = next;
+            continue;
+        }
+        i = end;
+    }
+
+    emit(start, n);
+    return sentences;
 }
 
 uint64_t wordHash(const std::u32string& text, const WordSpan& span) {

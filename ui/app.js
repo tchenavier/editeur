@@ -466,10 +466,57 @@ if (typeof window.cppInvoke !== "function") {
       },
 
       // --- Comparaison de versions ------------------------------------
-      // Elle suppose de lire un autre fichier sur le disque : hors
-      // application, on refuse proprement.
-      "compare.withFile": () => {
-        throw new Error("Comparaison indisponible dans l'aperçu (moteur simulé) : "
+      // Lire un autre fichier sur le disque est hors de portée d'un
+      // navigateur : on renvoie donc un RÉSULTAT D'EXEMPLE, qui rend
+      // l'écran de comparaison accessible pour travailler sa mise en
+      // page. Deux exemples, parce qu'il y a deux affichages à régler :
+      // la comparaison ordinaire (paragraphe par paragraphe) et celle
+      // d'une version qui a perdu son découpage (phrase par phrase).
+      // Un chemin contenant « aplat » demande le second.
+      "compare.withFile": (p) => {
+        const cote = (type, text, marks) => ({ type: type, text: text, marks: marks || [] });
+        const chemin = String(p.path || "version_precedente.md");
+        if (/aplat/i.test(chemin)) {
+          const titre = "Acte I : Le Destin de Cendres";
+          return {
+            path: chemin, title: "Exemple", identical: false, truncated: false,
+            structure: { unit: "sentence", flattened: "right", match: 0.55 },
+            stats: { equal: 2, changed: 1, added: 0, removed: 1,
+                     wordsAdded: 6, wordsRemoved: 0 },
+            rows: [
+              { kind: "changed",
+                left: cote("h1", titre),
+                right: cote("p", titre + " Le vent soufflait contre les remparts.",
+                            [[titre.length + 1, 38]]) },
+              { kind: "removed",
+                left: cote("p", "Le vent hurlait contre les remparts."), right: null },
+              { kind: "equal", left: cote("p", "Regina veillait."),
+                right: cote("p", "Regina veillait.") },
+              { kind: "equal", left: cote("p", "Elle rêvait de forêts."),
+                right: cote("p", "Elle rêvait de forêts.") },
+            ],
+          };
+        }
+        return {
+          path: chemin, title: "Exemple", identical: false, truncated: false,
+          structure: { unit: "block", flattened: "none", match: 0.92 },
+          stats: { equal: 2, changed: 1, added: 1, removed: 0,
+                   wordsAdded: 4, wordsRemoved: 0 },
+          rows: [
+            { kind: "equal", left: cote("h1", "Chapitre premier"),
+              right: cote("h1", "Chapitre premier") },
+            { kind: "changed", left: cote("p", "Il faisait nuit."),
+              right: cote("p", "Il faisait nuit noire.", [[16, 5]]) },
+            { kind: "added", left: null, right: cote("p", "Un chien aboya.") },
+            { kind: "equal", left: cote("p", "Élise se leva."),
+              right: cote("p", "Élise se leva.") },
+          ],
+        };
+      },
+      // Celle-ci MODIFIE le manuscrit : pas d'exemple qui vaille, on
+      // refuse proprement plutôt que de simuler un redécoupage.
+      "compare.reparagraph": () => {
+        throw new Error("Redécoupage indisponible dans l'aperçu (moteur simulé) : "
                         + "lancez l'application.");
       },
     };
@@ -3504,6 +3551,41 @@ function compareHeader(text) {
   return head;
 }
 
+// Bandeau d'explication. Il ne s'affiche que dans le cas qui le mérite :
+// une des deux versions rendue d'un seul tenant (un correcteur extérieur,
+// le plus souvent). Sans lui, la comparaison par phrases et le bouton de
+// redécoupage sortiraient de nulle part.
+function renderCompareNotice(structure, nomAutre, parPhrases) {
+  const notice = document.getElementById("compareNotice");
+  const texte = document.getElementById("compareNoticeText");
+  const bouton = document.getElementById("compareReflow");
+  const aplati = structure.flattened;
+  texte.textContent = "";
+  notice.hidden = !parPhrases && aplati === "none";
+  bouton.hidden = aplati !== "right";
+  if (notice.hidden) return;
+
+  const forte = document.createElement("strong");
+  const suite = document.createElement("span");
+  if (aplati === "right") {
+    forte.textContent = "Le manuscrit ouvert a perdu ses paragraphes.";
+    suite.textContent = " Tout son texte tient dans un seul bloc — c'est ce que"
+      + " rendent certains correcteurs. La comparaison s'est donc faite phrase"
+      + " par phrase. Le bouton ci-contre lui rend le découpage de "
+      + nomAutre + ", titres compris, sans toucher au texte.";
+  } else if (aplati === "left") {
+    forte.textContent = "La version " + nomAutre + " a perdu ses paragraphes.";
+    suite.textContent = " Son texte tient dans un seul bloc ; la comparaison"
+      + " s'est donc faite phrase par phrase. Pour lui rendre sa structure,"
+      + " ouvrez-la, puis comparez-la au manuscrit actuel.";
+  } else {
+    forte.textContent = "Comparaison phrase par phrase.";
+    suite.textContent = " Les paragraphes des deux versions ne se"
+      + " correspondaient plus assez pour être appariés.";
+  }
+  texte.append(forte, suite);
+}
+
 function renderCompare() {
   const res = compareResult;
   if (!res) return;
@@ -3529,8 +3611,11 @@ function renderCompare() {
   }
 
   const s = res.stats;
+  const structure = res.structure || {};
+  const parPhrases = structure.unit === "sentence";
+  const unite = parPhrases ? "passage(s)" : "paragraphe(s)";
   const morceaux = [];
-  if (s.changed) morceaux.push(s.changed + " paragraphe(s) modifié(s)");
+  if (s.changed) morceaux.push(s.changed + " " + unite + " modifié(s)");
   if (s.added) morceaux.push(s.added + " ajouté(s)");
   if (s.removed) morceaux.push(s.removed + " retiré(s)");
   if (s.wordsAdded || s.wordsRemoved) {
@@ -3541,6 +3626,7 @@ function renderCompare() {
   document.getElementById("compareTitle").textContent = "Comparaison avec " + nomAutre;
   document.getElementById("compareEmpty").hidden = !res.identical;
   compareGrid.hidden = !!res.identical;
+  renderCompareNotice(structure, nomAutre, parPhrases);
   if (res.truncated) {
     setStatus("Comparaison tronquée : le manuscrit dépasse la taille affichable.");
   }
@@ -3588,6 +3674,38 @@ document.getElementById("compareClose").addEventListener("click", () => {
 document.getElementById("compareSwap").addEventListener("click", () => {
   compareSwapped = !compareSwapped;
   renderCompare();
+});
+
+// Rendre au manuscrit ouvert les paragraphes de l'autre version. Le C++
+// fait tout le travail (alignement des mots) ; ici on demande, on confirme,
+// et on réaffiche.
+document.getElementById("compareReflow").addEventListener("click", async () => {
+  const res = compareResult;
+  if (!res) return;
+  const nomAutre = res.path.replace(/^.*[\\/]/, "");
+  const ok = await askConfirm(
+    "Le manuscrit ouvert va retrouver les paragraphes de « " + nomAutre + " ». "
+    + "Son texte n'est pas touché : seul le découpage change, et les titres "
+    + "retrouvent leur niveau. Ctrl+Z annule l'opération.",
+    "Remettre en paragraphes", "Redécouper le manuscrit");
+  if (!ok) return;
+  try {
+    setStatus("Redécoupage en cours…");
+    const resultat = await invoke("compare.reparagraph", { path: res.path });
+    if (!resultat.changed) {
+      setStatus("Aucun découpage n'a pu être retrouvé : le manuscrit est inchangé.");
+      return;
+    }
+    applyWholeDocument(resultat);
+    // Les indices de blocs ont tous changé : le curseur repart du début.
+    state.activeIndex = 0;
+    state.caret = { block: 0, pos: 0 };
+    // La comparaison affichée ne vaut plus rien : on la refait, et elle
+    // se fera cette fois paragraphe par paragraphe.
+    compareResult = await invoke("compare.withFile", { path: res.path });
+    renderCompare();
+    setStatus(resultat.count + " paragraphe(s) retrouvé(s).");
+  } catch (err) { reportError(err); }
 });
 
 // =====================================================================

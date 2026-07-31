@@ -467,7 +467,7 @@ int main() {
     bridge::SpellApi spellApi;
     // Comparaison de versions : relire une correction, ou voir ce qui
     // diffère avant d'écraser un fichier modifié en dehors de l'éditeur.
-    bridge::CompareApi compareApi(document);
+    bridge::CompareApi compareApi(document, undoManager);
     if (!editorApi.registerOn(dispatcher) || !fileApi.registerOn(dispatcher) ||
         !cardApi.registerOn(dispatcher) || !exportApi.registerOn(dispatcher) ||
         !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher) ||

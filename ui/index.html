@@ -204,6 +204,15 @@
     <button id="compareSwap" title="Intervertir les deux colonnes">⇄ Intervertir</button>
     <button id="compareClose">Fermer</button>
   </div>
+  <!-- Bandeau affiché quand une des deux versions a perdu son découpage :
+       sans lui, la comparaison par phrases surprendrait. Le bouton de
+       redécoupage y est posé plutôt que dans l'en-tête, pour que
+       l'explication et l'action ne soient pas à deux endroits. -->
+  <div id="compareNotice" hidden>
+    <span id="compareNoticeText"></span>
+    <button id="compareReflow" hidden
+            title="Rendre au manuscrit les paragraphes de l'autre version">¶ Remettre en paragraphes</button>
+  </div>
   <div id="compareGrid"></div>
   <div id="compareEmpty" hidden>Les deux versions sont identiques.</div>
 </div>

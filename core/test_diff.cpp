@@ -218,6 +218,54 @@ int main() {
         std::cout << "Test 8 OK (cas degeneres et textes longs)\n";
     }
 
+    // --- Test 9 : découpage en phrases ---
+    {
+        const std::u32string texte = u32("Il faisait nuit. Élise se leva ! "
+                                         "Que faire ? Rien…");
+        const auto phrases = core::splitSentences(texte);
+        assert(extract(texte, phrases) ==
+               "Il faisait nuit.|Élise se leva !|Que faire ?|Rien…");
+
+        // Un texte sans ponctuation finale reste une phrase — c'est le cas
+        // des titres, et il ne faut surtout pas les perdre.
+        const std::u32string titre = u32("Acte I : Le Destin de Cendres");
+        assert(core::splitSentences(titre).size() == 1);
+
+        assert(core::splitSentences(u32("")).empty());
+        assert(core::splitSentences(u32("   ")).empty());
+        std::cout << "Test 9 OK (decoupage en phrases)\n";
+    }
+
+    // --- Test 10 : les points qui ne terminent pas une phrase ---
+    {
+        auto une = [&](const char* t) {
+            return core::splitSentences(u32(t)).size();
+        };
+        // Abréviations suivies d'un nom propre : le piège classique.
+        assert(une("M. Dupont entra. Il salua.") == 2);
+        assert(une("Le Dr Watson et St Pierre.") == 1);
+        assert(une("Voir chap. 4 pour la suite.") == 1);
+        // Initiales.
+        assert(une("J. R. R. Tolkien écrivait.") == 1);
+        // Nombre décimal.
+        assert(une("Il mesurait 1.85 mètre.") == 1);
+        // Minuscule après le point : une abréviation non prévue, on ne coupe pas.
+        assert(une("etc. mais il resta.") == 1);
+        // « etc. » suivi d'une majuscule termine bel et bien la phrase.
+        assert(une("Des livres, des cartes, etc. Il partit.") == 2);
+
+        // Ponctuation fermante : elle appartient à la phrase qui s'achève.
+        const std::u32string dialogue = u32("Il cria : « Au feu ! » Puis il courut.");
+        const auto phrases = core::splitSentences(dialogue);
+        assert(phrases.size() == 2);
+        assert(extract(dialogue, phrases) == "Il cria : « Au feu ! »|Puis il courut.");
+
+        // Tiret de dialogue : un début de phrase valide, même en minuscule.
+        const std::u32string reponse = u32("Elle se tut. — je ne sais pas, dit-il.");
+        assert(core::splitSentences(reponse).size() == 2);
+        std::cout << "Test 10 OK (abreviations, initiales, nombres, guillemets)\n";
+    }
+
     std::cout << "Tous les tests de comparaison sont passes.\n";
     return 0;
 }

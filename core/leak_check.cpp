@@ -24,6 +24,7 @@
 #include "CardIO.h"
 #include "CardModel.h"
 #include "ChangeLog.h"
+#include "CompareApi.h"
 #include "EditorApi.h"
 #include "Epub.h"
 #include "ExportApi.h"
@@ -31,6 +32,7 @@
 #include "MarkdownIO.h"
 #include "PathUtf8.h"
 #include "ProjectIndex.h"
+#include "Reflow.h"
 #include "Search.h"
 #include "Speller.h"
 #include "TextModel.h"
@@ -319,6 +321,58 @@ static void doWork(const fs::path& tmpDir) {
         thesaurus.load("UTF-8\nroman|1\n(Nom)|récit|fiction\n");
         (void)thesaurus.lookup("roman");
         (void)thesaurus.lookup("absent");
+    }
+
+    // --- Comparaison de versions et redécoupage ----------------------
+    // Le redécoupage construit des blocs neufs, avec leurs plages de
+    // formatage : c'est de l'allocation à chaque appel, et le résultat
+    // remplace le document. Le chemin de REFUS (deux textes sans rapport)
+    // est passé aussi : il retourne l'entrée telle quelle, donc une copie.
+    {
+        core::Document reference;
+        for (const char32_t* t : {U"Acte I", U"Le vent hurlait. Regina veillait.",
+                                  U"— Je pars, dit-elle."}) {
+            reference.blocks().emplace_back();
+            reference.blocks().back().insertText(0, t);
+        }
+        reference.blocks()[0].setType(core::BlockType::Heading1);
+
+        core::Document aplati;
+        aplati.blocks().emplace_back();
+        aplati.blocks()[0].insertText(
+            0, U"Acte I Le vent soufflait. Regina veillait. — Je pars, dit-elle.");
+        aplati.blocks()[0].applyStyle(7, 8, core::TextStyle::Italic);
+
+        (void)core::flatness(aplati.blocks());
+        (void)core::flatness(reference.blocks());
+        (void)core::documentSentences(aplati.blocks());
+        (void)core::documentWords(reference.blocks());
+        (void)core::reflowLike(aplati.blocks(), reference.blocks());
+
+        core::Document etranger;
+        etranger.blocks().emplace_back();
+        etranger.blocks()[0].insertText(0, U"zzz yyy xxx www vvv.");
+        (void)core::reflowLike(etranger.blocks(), reference.blocks());
+
+        const fs::path avant = tmpDir / "leak_avant.md";
+        std::string err;
+        io::saveToFile(reference, avant, &err);
+
+        core::UndoManager undoCompare;
+        bridge::Bridge pont;
+        bridge::CompareApi compareApi(aplati, undoCompare);
+        compareApi.registerOn(pont);
+        auto call = [&pont](const char* command, const bridge::json& payload) {
+            const bridge::json request = {{"command", command}, {"payload", payload}};
+            (void)pont.dispatch(request.dump());
+        };
+        call("compare.withFile", {{"path", utils::pathToUtf8(avant)}});
+        call("compare.reparagraph", {{"path", utils::pathToUtf8(avant)}});
+        call("compare.reparagraph", {{"path", utils::pathToUtf8(avant)}}); // refusé
+        call("compare.withFile", {{"path", "fichier_absent_zzz.md"}});     // chemin d'erreur
+
+        std::error_code ec;
+        fs::remove(avant, ec);
     }
 }
 

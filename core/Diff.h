@@ -44,10 +44,34 @@ struct WordSpan {
     size_t length = 0;
 };
 
+// Un caractère « blanc », insécables comprises. Une seule définition,
+// partagée : le découpage en phrases et le redécoupage en paragraphes
+// doivent voir exactement les mêmes séparations.
+bool isSpaceChar(char32_t c);
+
 // Découpe un texte en mots. La ponctuation et les espaces séparent ; les
 // signes eux-mêmes ne sont pas des mots (comparer la ponctuation
 // produirait un bruit constant sur du texte remanié).
 std::vector<WordSpan> tokenizeWords(const std::u32string& text);
+
+// Découpe un texte en PHRASES. Les plages sont sans espaces au bord, et
+// couvrent tout le texte utile dans l'ordre.
+//
+// À QUOI ÇA SERT : certains outils extérieurs — les correcteurs, en
+// particulier — rendent le texte corrigé d'un seul tenant, toute la
+// structure en paragraphes perdue. Face à un manuscrit resté découpé,
+// l'alignement des blocs n'a alors plus rien à quoi s'accrocher : un bloc
+// unique ne peut s'apparier avec aucun des cent autres. La phrase, elle,
+// survit à ce traitement — un correcteur retouche des mots, il ne fusionne
+// ni ne coupe les phrases. Elle sert donc d'unité de repli.
+//
+// RÈGLES (français) : coupure après « . ! ? … » et les guillemets ou
+// parenthèses qui les suivent, à condition qu'un espace vienne ensuite et
+// que la suite commence comme une phrase (majuscule, chiffre, guillemet
+// ouvrant, tiret de dialogue). Pas de coupure après une abréviation
+// courante (« M. », « Dr », « n° ») ni après une initiale (« J. R. R. »),
+// pas de coupure au milieu d'un nombre.
+std::vector<WordSpan> splitSentences(const std::u32string& text);
 
 // -------------------------------------------------------------------
 // Comparaison de séquences

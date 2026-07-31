@@ -484,6 +484,32 @@
     padding: 3rem; text-align: center; color: var(--muted); font-style: italic;
   }
 
+  /* Bandeau d'explication quand une des deux versions a perdu ses
+     paragraphes. Ton d'information, pas d'alerte : rien n'est cassé, la
+     comparaison s'est simplement faite autrement. */
+  #compareNotice {
+    display: flex; align-items: center; gap: .9rem; flex-wrap: wrap;
+    padding: .55rem .9rem;
+    background: #fbeecb; color: #7a5b00; border-bottom: 1px solid #e6c86a;
+    font-size: .87rem; line-height: 1.45;
+  }
+  #compareNotice #compareNoticeText { flex: 1; min-width: 20rem; }
+  #compareNotice strong { font-weight: 600; }
+  #compareNotice button {
+    font: inherit; font-size: .87rem; white-space: nowrap;
+    color: #5c4400; background: #fff6e0;
+    border: 1px solid #d8b45a; border-radius: 6px;
+    padding: .3rem .7rem; cursor: pointer;
+  }
+  #compareNotice button:hover { background: #fffaf0; }
+  :root[data-theme="sombre"] #compareNotice {
+    background: #3a3120; color: #e8c877; border-bottom-color: #5a4a24;
+  }
+  :root[data-theme="sombre"] #compareNotice button {
+    color: #e8c877; background: #4a3f28; border-color: #6b5730;
+  }
+  :root[data-theme="sombre"] #compareNotice button:hover { background: #5a4d32; }
+
   /* ---------------------------------------------------------------- */
   /* Correcteur orthographique (fin de Phase 1)                        */
   /*                                                                   */
