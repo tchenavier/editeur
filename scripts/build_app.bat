@@ -49,6 +49,7 @@ set FLAGS=/nologo /std:c++17 /utf-8 /EHsc /W4 /guard:cf
 set INC=/Icore /Iio /Iutils /IBridge /I"%TP%\webview" /I"%TP%\webview2"
 
 echo === Compilation de l'application ===
+REM %SRC_ALL% couvre tous les modules : voir sources.bat.
 cl %FLAGS% %INC% %SRC_ALL% Bridge\main_webview.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\editeur.exe" ^
    /link /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA

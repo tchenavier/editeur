@@ -1,0 +1,11 @@
+# Synonymes écartés du thésaurus, un couple par ligne.
+#
+# Ce fichier corrige les erreurs du dictionnaire de synonymes sans y
+# toucher : celui-ci est retéléchargeable, toute retouche y serait
+# perdue. Les exclusions valent dans LES DEUX SENS.
+#
+# Il se remplit depuis l'éditeur (clic droit sur un mot, puis la croix
+# à côté d'un synonyme), mais reste modifiable à la main.
+
+fenêtre|fenouil
+gâteau|noir

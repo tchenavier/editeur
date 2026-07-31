@@ -111,4 +111,9 @@ private:
 // FileApi (qui renvoie le document après un chargement).
 json serializeBlock(const core::TextBlock& block);
 
+// Nom du type de bloc tel que le voit l'interface ("p", "h1"... "h6").
+// Exposé pour les modules qui n'ont pas besoin du bloc entier — la
+// comparaison de versions, par exemple.
+const char* blockTypeName(core::BlockType type);
+
 } // namespace bridge

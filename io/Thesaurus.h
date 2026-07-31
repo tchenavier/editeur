@@ -23,7 +23,9 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace io {
@@ -48,14 +50,55 @@ public:
     size_t entryCount() const { return m_index.size(); }
 
     // Sens et synonymes d'un mot. Liste vide si le mot est absent. La
-    // recherche essaie le mot tel quel, puis sa forme minuscule.
+    // recherche essaie le mot tel quel, puis sa forme minuscule. Les
+    // couples exclus (voir plus bas) sont retirés du résultat.
     std::vector<ThesaurusMeaning> lookup(const std::string& word) const;
+
+    // --- Corrections -------------------------------------------------
+    //
+    // POURQUOI CE MÉCANISME : ce thésaurus est associatif plus que
+    // strictement synonymique, et comporte de vraies erreurs (« gâteau »
+    // y figure comme synonyme de « noir »). Aucun critère automatique ne
+    // permet de les distinguer : la réciprocité, mesurée sur les 422 000
+    // couples du fichier, écarterait surtout de bons synonymes.
+    //
+    // La correction vient donc de l'auteur, d'un clic, et se conserve
+    // dans un fichier VERSIONNÉ du projet — et non dans le fichier de
+    // dictionnaire, qui est retéléchargeable et dont toute retouche
+    // disparaîtrait au prochain fetch_deps.
+    //
+    // Les exclusions sont SYMÉTRIQUES : déclarer que « gâteau » n'est pas
+    // un synonyme de « noir » vaut aussi dans l'autre sens. C'est la même
+    // relation fausse, l'auteur n'a pas à la corriger deux fois.
+
+    // Format du fichier : un couple « mot|synonyme » par ligne, lignes
+    // vides et lignes commençant par # ignorées. Lecture tolérante : une
+    // ligne abîmée est passée, le reste s'applique.
+    bool loadExclusions(const std::filesystem::path& path,
+                        std::string* errorMessage = nullptr);
+    void setExclusions(const std::vector<std::pair<std::string, std::string>>& pairs);
+
+    // Ajoute un couple. Retourne false s'il était déjà connu.
+    bool addExclusion(const std::string& word, const std::string& synonym);
+
+    // Réécrit le fichier (écriture atomique), trié, avec un en-tête
+    // explicatif pour qui l'ouvrirait à la main.
+    bool saveExclusions(const std::filesystem::path& path,
+                        std::string* errorMessage = nullptr) const;
+
+    size_t exclusionCount() const { return m_exclusions.size(); }
+    bool isExcluded(const std::string& word, const std::string& synonym) const;
 
 private:
     std::string m_content;
     // Position de chaque mot dans m_content, triée par mot : la
     // recherche est binaire, sans copier les 36 000 mots.
     std::vector<std::pair<std::string, size_t>> m_index;
+
+    // Couples refusés, en minuscules et ordonnés (petit mot d'abord) pour
+    // que la symétrie soit acquise par construction plutôt que testée
+    // deux fois à chaque recherche.
+    std::set<std::pair<std::string, std::string>> m_exclusions;
 
     std::vector<ThesaurusMeaning> parseAt(size_t offset) const;
 };

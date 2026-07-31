@@ -4,8 +4,10 @@
 // que la logique du pont est indépendante du transport.
 
 #include "Bridge.h"
+#include "CompareApi.h"
 #include "EditorApi.h"
 #include "CardApi.h"
+#include "MarkdownIO.h"
 #include "ExportApi.h"
 #include "FileApi.h"
 #include "ProjectApi.h"
@@ -882,6 +884,100 @@ int main() {
 
         std::filesystem::remove_all(racine, ec);
         std::cout << "Test 22 OK (suivi de projet via le pont)\n";
+    }
+
+    // --- Test 23 : comparaison de deux versions via le pont ---
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_compare";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+        const auto ancien = dossier / "ancienne_version.md";
+
+        // Version de référence, écrite sur disque.
+        {
+            core::Document reference;
+            reference.metadata().title = "Roman";
+            for (const char32_t* t : {U"# Chapitre premier", U"Il faisait nuit.",
+                                      U"Élise se leva.", U"Elle sortit."}) {
+                core::TextBlock block(t[0] == U'#' ? core::BlockType::Heading1
+                                                   : core::BlockType::Paragraph);
+                block.insertText(0, t[0] == U'#' ? std::u32string(U"Chapitre premier")
+                                                 : std::u32string(t));
+                reference.blocks().push_back(block);
+            }
+            std::string err;
+            assert(io::saveToFile(reference, ancien, &err));
+        }
+
+        // Version courante : un mot changé, un paragraphe inséré.
+        core::Document courant;
+        courant.metadata().title = "Roman";
+        auto ajoute = [&courant](core::BlockType type, const std::u32string& texte) {
+            core::TextBlock block(type);
+            block.insertText(0, texte);
+            courant.blocks().push_back(block);
+        };
+        ajoute(core::BlockType::Heading1, U"Chapitre premier");
+        ajoute(core::BlockType::Paragraph, U"Il faisait nuit noire.");  // modifié
+        ajoute(core::BlockType::Paragraph, U"Un chien aboya.");         // inséré
+        ajoute(core::BlockType::Paragraph, U"Élise se leva.");
+        ajoute(core::BlockType::Paragraph, U"Elle sortit.");
+
+        core::UndoManager undo7;
+        bridge::Bridge b7;
+        bridge::CompareApi compareApi(courant);
+        assert(compareApi.registerOn(b7));
+        assert(!compareApi.registerOn(b7)); // doublon refusé
+
+        auto r = call(b7, "compare.withFile", {{"path", ancien.string()}});
+        assert(r["ok"] == true);
+        const auto& res = r["result"];
+        assert(res["identical"] == false);
+        assert(res["stats"]["changed"] == 1);
+        assert(res["stats"]["added"] == 1);
+        assert(res["stats"]["removed"] == 0);
+        // LE point : les trois autres paragraphes restent « egaux », alors
+        // qu'ils sont décalés d'un rang par l'insertion.
+        assert(res["stats"]["equal"] == 3);
+
+        // La ligne modifiée porte les deux textes et les mots à surligner.
+        bool trouve = false;
+        for (const auto& ligne : res["rows"]) {
+            if (ligne["kind"] == "changed") {
+                trouve = true;
+                assert(ligne["left"]["text"] == "Il faisait nuit.");
+                assert(ligne["right"]["text"] == "Il faisait nuit noire.");
+                assert(ligne["right"]["marks"].size() == 1); // « noire » ajouté
+                assert(ligne["left"]["marks"].empty());      // rien retiré
+            }
+            if (ligne["kind"] == "added") {
+                assert(ligne["left"].is_null());
+                assert(ligne["right"]["text"] == "Un chien aboya.");
+            }
+        }
+        assert(trouve);
+
+        // Comparer un document à lui-même ne montre aucune différence.
+        {
+            core::Document copie = courant;
+            bridge::Bridge b8;
+            bridge::CompareApi memeApi(copie);
+            assert(memeApi.registerOn(b8));
+            std::string err;
+            const auto meme = dossier / "identique.md";
+            assert(io::saveToFile(courant, meme, &err));
+            auto same = call(b8, "compare.withFile", {{"path", meme.string()}});
+            assert(same["result"]["identical"] == true);
+            assert(same["result"]["stats"]["changed"] == 0);
+        }
+
+        // Fichier absent : erreur propre, jamais de plantage.
+        assert(call(b7, "compare.withFile", {{"path", "zzz_absent.md"}})["ok"] == false);
+        assert(call(b7, "compare.withFile", {})["ok"] == false);
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 23 OK (comparaison de versions via le pont)\n";
     }
 
     std::cout << "Tous les tests du pont sont passes.\n";

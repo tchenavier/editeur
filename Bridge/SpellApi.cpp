@@ -48,6 +48,22 @@ fs::path SpellApi::findDictionaryFolder() {
     return fs::path();
 }
 
+fs::path SpellApi::exclusionsPath() {
+    // Même stratégie que pour l'interface et les dictionnaires :
+    // l'exécutable peut être lancé depuis divers dossiers de build.
+    const char* const candidates[] = {
+        "data", "../data", "../../data", "../../../data",
+    };
+    for (const char* candidate : candidates) {
+        const fs::path folder = utils::pathFromUtf8(candidate);
+        std::error_code ec;
+        if (fs::exists(folder, ec)) return folder / "synonymes_exclus.txt";
+    }
+    // Aucun dossier data trouvé : on désigne celui du répertoire courant,
+    // qui sera créé à la première écriture.
+    return utils::pathFromUtf8("data/synonymes_exclus.txt");
+}
+
 fs::path SpellApi::personalPathFor(const fs::path& manuscript) {
     if (manuscript.empty()) return fs::path();
     fs::path path = manuscript.parent_path() / manuscript.stem();
@@ -66,7 +82,27 @@ bool SpellApi::registerOn(Bridge& bridge) {
     ok &= bridge.registerCommand("spell.removeWord",
                                                   [this](const json& p) { return removeWord(p); });
     ok &= bridge.registerCommand("spell.ignore",  [this](const json& p) { return ignore(p); });
+    ok &= bridge.registerCommand("spell.excludeSynonym",
+                                                  [this](const json& p) { return excludeSynonym(p); });
     return ok;
+}
+
+json SpellApi::excludeSynonym(const json& payload) {
+    const std::string word = requireString(payload, "word");
+    const std::string synonym = requireString(payload, "synonym");
+    if (word.empty() || synonym.empty()) {
+        throw std::runtime_error("Mot ou synonyme vide.");
+    }
+
+    const bool added = m_thesaurus.addExclusion(word, synonym);
+    const fs::path path = exclusionsPath();
+    std::string error;
+    const bool saved = m_thesaurus.saveExclusions(path, &error);
+    if (!saved) throw std::runtime_error(error);
+
+    return {{"added", added},
+            {"count", m_thesaurus.exclusionCount()},
+            {"path", utils::pathToUtf8(path)}};
 }
 
 void SpellApi::loadPersonal(const std::string& manuscriptPath) {
@@ -145,6 +181,7 @@ json SpellApi::state(const json&) {
             {"forms", m_speller.formCount()},
             {"thesaurus", m_thesaurus.loaded()},
             {"thesaurusEntries", m_thesaurus.entryCount()},
+            {"exclusions", m_thesaurus.exclusionCount()},
             {"personal", personal},
             {"personalPath", m_personalPath.empty() ? std::string()
                                                     : utils::pathToUtf8(m_personalPath)},
@@ -182,6 +219,10 @@ json SpellApi::load(const json& payload) {
     // l'auteur du correcteur.
     std::string thesaurusError;
     m_thesaurus.loadFile(folder / "thes_fr.dat", &thesaurusError);
+    // Corrections de l'auteur : chargées APRÈS le thésaurus (loadFile ne
+    // les touche pas, mais l'ordre rend l'intention lisible). Fichier
+    // absent = aucune correction, ce n'est pas une erreur.
+    m_thesaurus.loadExclusions(exclusionsPath());
 
     m_lastError = m_speller.loaded() ? std::string()
                                      : "Aucune forme n'a pu être produite du dictionnaire.";

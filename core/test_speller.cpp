@@ -14,6 +14,8 @@
 #include "Utf8.h"
 
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -322,6 +324,94 @@ int main() {
         assert(abime.lookup("bon").size() == 1);
         assert(abime.lookup("cassé").size() == 1); // annonce 3 sens, en donne 1
         std::cout << "Test 8 OK (thesaurus MyThes)\n";
+    }
+
+    // --- Test 9 : corrections de l'auteur (synonymes écartés) ---
+    {
+        const std::string contenu =
+            "UTF-8\n"
+            "noir|1\n"
+            "(Adjectif)|sombre|gâteau|ébène\n"
+            "gâteau|1\n"
+            "(Nom)|tarte|noir|flan\n"
+            "seul|1\n"
+            "(Adjectif)|unique\n";
+
+        io::Thesaurus thesaurus;
+        assert(thesaurus.load(contenu));
+        assert(thesaurus.lookup("noir")[0].synonyms.size() == 3);
+
+        // Une seule déclaration doit valoir DANS LES DEUX SENS : c'est la
+        // même relation fausse, l'auteur n'a pas à la corriger deux fois.
+        assert(thesaurus.addExclusion("noir", "gâteau"));
+        assert(!thesaurus.addExclusion("noir", "gâteau"));   // déjà connu
+        assert(!thesaurus.addExclusion("gâteau", "noir"));   // symétrique
+        assert(thesaurus.exclusionCount() == 1);
+
+        const auto sensNoir = thesaurus.lookup("noir");
+        assert(sensNoir.size() == 1);
+        assert(sensNoir[0].synonyms.size() == 2); // gâteau retiré
+        assert(sensNoir[0].synonyms[0] == "sombre");
+        assert(sensNoir[0].synonyms[1] == "ébène");
+
+        const auto sensGateau = thesaurus.lookup("gâteau");
+        assert(sensGateau[0].synonyms.size() == 2); // noir retiré dans l'autre sens
+        assert(sensGateau[0].synonyms[0] == "tarte");
+
+        // La casse ne doit pas permettre de contourner la correction.
+        assert(thesaurus.isExcluded("Noir", "Gâteau"));
+        assert(thesaurus.isExcluded("GÂTEAU", "noir"));
+        assert(!thesaurus.isExcluded("noir", "sombre"));
+
+        // Un sens vidé de tous ses synonymes disparaît : un intitulé sans
+        // rien dessous ressemblerait à un défaut d'affichage.
+        thesaurus.addExclusion("seul", "unique");
+        assert(thesaurus.lookup("seul").empty());
+
+        // Aller-retour sur disque.
+        const auto fichier = std::filesystem::temp_directory_path() /
+                             "test_exclusions_synonymes.txt";
+        std::error_code ec;
+        std::filesystem::remove(fichier, ec);
+        std::string erreur;
+        assert(thesaurus.saveExclusions(fichier, &erreur));
+        assert(erreur.empty());
+        std::filesystem::path tmp = fichier;
+        tmp += ".tmp";
+        assert(!std::filesystem::exists(tmp)); // écriture atomique
+
+        io::Thesaurus relu;
+        assert(relu.load(contenu));
+        assert(relu.loadExclusions(fichier));
+        assert(relu.exclusionCount() == 2);
+        assert(relu.lookup("noir")[0].synonyms.size() == 2);
+        assert(relu.lookup("seul").empty());
+
+        // Fichier absent : aucune correction, et ce n'est PAS une erreur
+        // (un projet neuf n'en a aucune).
+        io::Thesaurus neuf;
+        assert(neuf.load(contenu));
+        assert(!neuf.loadExclusions(fichier.parent_path() / "jamais_ecrit_zzz.txt"));
+        assert(neuf.exclusionCount() == 0);
+        assert(neuf.lookup("noir")[0].synonyms.size() == 3);
+
+        // Fichier bricolé : les lignes fausses sont ignorées, les bonnes
+        // s'appliquent.
+        io::Thesaurus tolere;
+        assert(tolere.load(contenu));
+        const auto abime = std::filesystem::temp_directory_path() /
+                           "test_exclusions_abime.txt";
+        {
+            std::ofstream out(abime, std::ios::binary | std::ios::trunc);
+            out << "# commentaire\n\nnoir|gâteau\nligne sans barre\n|vide\nmot|\n";
+        }
+        assert(tolere.loadExclusions(abime));
+        assert(tolere.exclusionCount() == 1);
+        assert(tolere.lookup("noir")[0].synonyms.size() == 2);
+
+        std::filesystem::remove(fichier, ec);
+        std::filesystem::remove(abime, ec);
+        std::cout << "Test 9 OK (synonymes ecartes par l'auteur)\n";
     }
 
     std::cout << "Tous les tests du correcteur sont passes.\n";

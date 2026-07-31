@@ -1,0 +1,633 @@
+/* style.css — feuille de style de l'editeur.
+ *
+ * Charge par ui/index.html pour l'apercu navigateur, et INSERE dans la
+ * page par main_webview.cpp au demarrage de l'application : celle-ci
+ * fournit sa page par set_html, donc sans origine, et un <link> vers un
+ * fichier voisin n'y serait jamais charge.
+ *
+ * Modifier ce fichier ne demande PAS de recompiler : il est relu a chaque
+ * lancement.
+ */
+  /* ---- Thèmes : clair, crème, sombre (valeurs du cadrage) ---- */
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --panel: #f2f2f2;
+    --panel-border: #d8d8d8;
+    --btn: #ffffff;
+    --btn-hover: #e9e9e9;
+    --btn-active: #d4e4f7;
+    --accent: #2f6fb0;
+    --muted: #666666;
+    --editor-font-size: 18px;
+  }
+  :root[data-theme="creme"] {
+    --bg: #F5EDD8;          /* le blanc devient crème */
+    --fg: #1F1F1F;
+    --panel: #ece1c4;
+    --panel-border: #d8c9a3;
+    --btn: #f3ead1;
+    --btn-hover: #e4d6b3;
+    --btn-active: #d9c48f;
+    --accent: #8a6d3b;
+    --muted: #6d5f43;
+  }
+  :root[data-theme="sombre"] {
+    --bg: #1F1F1F;
+    --fg: #F5EDD8;          /* le texte passe en crème clair */
+    --panel: #2a2a2a;
+    --panel-border: #3a3a3a;
+    --btn: #333333;
+    --btn-hover: #404040;
+    --btn-active: #3a5876;
+    --accent: #7fb0e0;
+    --muted: #9a9a90;
+  }
+
+  * { box-sizing: border-box; }
+  /* L'attribut « hidden » doit TOUJOURS l'emporter : sans cette règle,
+     un « display: flex » déclaré plus bas continue d'afficher l'élément
+     (les deux vues se superposaient). */
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Barre d'outils ---- */
+  #toolbar {
+    display: flex; align-items: center; gap: .35rem;
+    flex-wrap: wrap;
+    padding: .4rem .6rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+    user-select: none;
+  }
+  /* Les groupes se replient eux aussi : sans quoi le dernier (Ouvrir,
+     Enregistrer, Infos, Exporter, Comparer…) reste d'un bloc et déborde
+     de la fenêtre quand celle-ci est étroite. */
+  .group { display: flex; align-items: center; gap: .2rem; flex-wrap: wrap; }
+  .sep { width: 1px; align-self: stretch; background: var(--panel-border); margin: .1rem .35rem; }
+  #toolbar button, #toolbar select {
+    font: inherit; color: var(--fg);
+    background: var(--btn);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: .3rem .5rem;
+    cursor: pointer; min-width: 2rem;
+    line-height: 1;
+  }
+  #toolbar button:hover, #toolbar select:hover { background: var(--btn-hover); }
+  #toolbar button:disabled { opacity: .4; cursor: default; }
+  #toolbar button.active { background: var(--btn-active); border-color: var(--accent); }
+  #toolbar .style-btn { font-size: 1rem; width: 2.2rem; }
+  #fontSizeGroup button { width: 2rem; padding: .3rem .3rem; }
+  #fontSizeInput {
+    font: inherit; font-size: .82rem; text-align: center;
+    width: 3rem; min-width: 0; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .3rem .15rem; line-height: 1;
+  }
+  .spacer { flex: 1; }
+  #wordcount { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+
+  /* ---- Bannière d'alerte (session / rappels) ---- */
+  #alertBanner {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .55rem .8rem;
+    background: var(--btn-active);
+    border-bottom: 1px solid var(--accent);
+    color: var(--fg); font-size: .92rem;
+  }
+  #alertBanner[hidden] { display: none; }
+  #alertText { flex: 1; }
+  #alertBanner button {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .3rem .8rem; cursor: pointer;
+  }
+  #alertBanner button:hover { background: var(--btn-hover); }
+
+  /* ---- Onglets et champs des paramètres ---- */
+  .tabs { display: flex; gap: .3rem; margin-bottom: .8rem; }
+  .tabs .tab {
+    font: inherit; color: var(--muted); background: transparent;
+    border: none; border-bottom: 2px solid transparent;
+    padding: .35rem .6rem; cursor: pointer; border-radius: 0;
+  }
+  .tabs .tab:hover { color: var(--fg); }
+  .tabs .tab.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-panel[hidden] { display: none; }
+  .field-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .55rem; flex-wrap: wrap; }
+  .field-row label { font-size: .82rem; color: var(--muted); }
+  .field-row label.check { color: var(--fg); font-size: .9rem; display: flex; align-items: center; gap: .4rem; }
+  .field-row input[type="number"] { width: 5rem; }
+  .field-row input[type="text"] { flex: 1; min-width: 9rem; }
+  .field-row input, .field-row button, .field-row select {
+    font: inherit; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .35rem .5rem;
+  }
+  .field-row button { background: var(--btn); cursor: pointer; }
+  .field-row button:hover { background: var(--btn-hover); }
+  .reminder-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; font-size: .88rem; }
+  .reminder-row .rem-date { color: var(--muted); font-size: .8rem; min-width: 6.5rem; }
+  .reminder-row .rem-label { flex: 1; }
+  .reminder-row .rem-due { color: var(--accent); font-weight: 600; }
+  .reminder-row .rem-del {
+    font: inherit; color: var(--muted); background: transparent; border: none;
+    cursor: pointer; padding: .15rem .4rem; border-radius: 6px;
+  }
+  .reminder-row .rem-del:hover { background: var(--btn-hover); color: var(--fg); }
+
+  /* ---- Barre de recherche / remplacement ---- */
+  #findBar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+    padding: .4rem .6rem; display: flex; flex-direction: column; gap: .35rem;
+  }
+  #findBar[hidden] { display: none; }
+  .find-row { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  #findBar input[type="text"] {
+    font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .35rem .5rem;
+    min-width: 14rem;
+  }
+  #findBar button, #findBar select {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .35rem .55rem; cursor: pointer;
+  }
+  #findBar button:hover, #findBar select:hover { background: var(--btn-hover); }
+  #findBar .toggle.on { background: var(--btn-active); border-color: var(--accent); }
+  .find-count { color: var(--muted); font-size: .82rem; min-width: 5rem; }
+  .find-count.none { color: #c0392b; }
+  :root[data-theme="sombre"] .find-count.none { color: #ff8a7a; }
+
+  /* Surlignage de l'occurrence courante (API CSS Custom Highlight). */
+  ::highlight(find-current) { background: #ffd54f; color: #1f1f1f; }
+
+  /* Résultats dans les fiches, sous la barre de recherche. */
+  #cardResults { max-height: 40vh; overflow-y: auto; border-top: 1px solid var(--panel-border); margin-top: .2rem; }
+  #cardResults[hidden] { display: none; }
+  .card-results-head { font-size: .78rem; color: var(--muted); padding: .35rem .2rem .1rem; }
+  #cardResultsList { list-style: none; margin: 0; padding: 0; }
+  .card-result { padding: .35rem .5rem; border-radius: 6px; cursor: pointer; }
+  .card-result:hover { background: var(--btn-hover); }
+  .card-result .cr-title { font-size: .85rem; }
+  .card-result .cr-field { font-size: .75rem; color: var(--muted); }
+  .card-result .cr-snippet { font-size: .78rem; }
+
+  /* ---- Espace de travail : plan (chapitres) + éditeur ---- */
+  #workspace { flex: 1; display: flex; min-height: 0; }
+
+  #chapterPanel {
+    width: 16rem; flex-shrink: 0; overflow-y: auto;
+    border-right: 1px solid var(--panel-border);
+    background: var(--panel);
+    padding: .6rem .5rem;
+  }
+  #chapterPanel[hidden] { display: none; }
+  .panel-head { font-size: .8rem; font-weight: 600; color: var(--fg); margin: .1rem .3rem .5rem; }
+  .panel-hint { font-weight: 400; color: var(--muted); }
+  #chapterList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
+  .chapter-item {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .4rem .55rem; border-radius: 6px; cursor: grab;
+    font-size: .88rem; color: var(--fg);
+    border: 1px solid transparent;
+  }
+  .chapter-item .ch-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chapter-item .ch-level { flex-shrink: 0; font-size: .68rem; color: var(--muted); opacity: .7; }
+  /* Sous-parties (H2 à H6) : plus discrètes que les chapitres. */
+  .chapter-item.sub { font-size: .82rem; }
+  .chapter-item.sub .ch-title { color: var(--muted); }
+  .chapter-item.sub.active .ch-title { color: var(--fg); }
+  .chapter-item:hover { background: var(--btn-hover); }
+  .chapter-item.active { border-color: var(--accent); }
+  .chapter-item.preamble { color: var(--muted); font-style: italic; cursor: default; }
+  .chapter-item.dragging { opacity: .4; }
+  .chapter-item.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+  .chapter-item.drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
+  .chapter-item .sc-index { color: var(--muted); font-size: .78rem; margin-right: .35rem; }
+
+  /* ---- Vue des fiches de worldbuilding ---- */
+  #cardsView { flex: 1; display: flex; min-height: 0; }
+  #cardsView[hidden] { display: none; }
+
+  #cardList {
+    width: 20rem; flex-shrink: 0; display: flex; flex-direction: column;
+    border-right: 1px solid var(--panel-border); background: var(--panel);
+  }
+  .cards-warning {
+    margin: .5rem .5rem 0; padding: .5rem .6rem; border-radius: 6px;
+    font-size: .78rem; line-height: 1.35;
+    background: #fbeecb; color: #7a5b00; border: 1px solid #e6c86a;
+  }
+  :root[data-theme="sombre"] .cards-warning { background: #3a3120; color: #e8c877; border-color: #5a4a24; }
+  .cards-filters { display: flex; flex-direction: column; gap: .35rem; padding: .6rem; }
+  .cards-filters select, .cards-filters input, .cards-filters button {
+    font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .35rem .5rem;
+  }
+  .cards-filters button { background: var(--btn); cursor: pointer; }
+  .cards-filters button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #cardItems { list-style: none; margin: 0; padding: 0 .5rem; flex: 1; overflow-y: auto; }
+  .card-item {
+    padding: .45rem .55rem; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: .15rem;
+  }
+  .card-item:hover { background: var(--btn-hover); }
+  .card-item.active { border-color: var(--accent); background: var(--btn-active); }
+  .card-item .ci-title { display: block; font-size: .9rem; }
+  .card-item .ci-meta { display: block; font-size: .74rem; color: var(--muted); }
+  .cards-root {
+    display: flex; align-items: center; gap: .4rem; padding: .5rem .6rem;
+    border-top: 1px solid var(--panel-border); font-size: .76rem;
+  }
+  .cards-root span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cards-root button {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .25rem .5rem; cursor: pointer;
+  }
+  .muted { color: var(--muted); }
+
+  #cardForm { flex: 1; overflow-y: auto; padding: 1.2rem clamp(1rem, 4vw, 2.5rem); }
+  .form-empty { color: var(--muted); font-style: italic; margin-top: 2rem; }
+  .form-head { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  .form-head input {
+    flex: 1; min-width: 12rem; font: inherit; font-size: 1.15rem; color: var(--fg);
+    background: transparent; border: none; border-bottom: 2px solid var(--panel-border);
+    padding: .3rem .1rem;
+  }
+  .form-head input:focus { outline: none; border-bottom-color: var(--accent); }
+  .form-head select, .form-head button {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .4rem .7rem; cursor: pointer;
+  }
+  .form-head button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .form-field { margin-bottom: .9rem; }
+  .form-field > label {
+    display: block; font-size: .78rem; color: var(--muted);
+    margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .03em;
+  }
+  .form-field input[type="text"], .form-field input[type="number"], .form-field textarea {
+    width: 100%; font: inherit; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .45rem .55rem;
+  }
+  .form-field textarea { min-height: 5.5rem; resize: vertical; line-height: 1.5; }
+  .list-row { display: flex; gap: .35rem; margin-bottom: .3rem; }
+  .list-row input { flex: 1; }
+  .list-row button, .list-add {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .3rem .6rem; cursor: pointer;
+  }
+  .list-row button:hover, .list-add:hover { background: var(--btn-hover); }
+  .chips { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 999px; padding: .2rem .5rem; font-size: .82rem;
+  }
+  .chip button { border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 0 .1rem; }
+  .chip button:hover { color: var(--fg); }
+  .chip-add {
+    font: inherit; font-size: .82rem; color: var(--fg); background: var(--bg);
+    border: 1px dashed var(--panel-border); border-radius: 999px; padding: .2rem .6rem;
+  }
+  .chip-missing { border-style: dashed; color: var(--muted); font-style: italic; }
+
+  /* ---- Zone d'édition ---- */
+  #editor {
+    flex: 1; overflow-y: auto;
+    padding: 2.5rem clamp(1rem, 8vw, 6rem);
+  }
+  .doc {
+    max-width: 46rem; margin: 0 auto;
+    font-size: var(--editor-font-size);
+    line-height: 1.6;
+  }
+  .block {
+    margin: 0 0 .55em 0;
+    outline: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .block:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted); pointer-events: none;
+  }
+  h1.block { font-size: 1.9em; font-weight: 700; margin: .6em 0 .3em; line-height: 1.25; }
+  h2.block { font-size: 1.6em; font-weight: 700; margin: .6em 0 .3em; line-height: 1.25; }
+  h3.block { font-size: 1.35em; font-weight: 700; margin: .5em 0 .25em; }
+  h4.block { font-size: 1.18em; font-weight: 700; }
+  h5.block { font-size: 1.05em; font-weight: 700; }
+  h6.block { font-size: 1em; font-weight: 700; color: var(--muted); }
+  .s-bold { font-weight: 700; }
+  .s-italic { font-style: italic; }
+  /* Mention d'une fiche détectée dans le texte (Phase 3). Discrète en
+     lecture, elle invite au Ctrl+clic pour ouvrir la fiche. */
+  .mention {
+    border-bottom: 1px dashed var(--accent);
+    cursor: pointer;
+  }
+  .mention:hover { background: var(--btn-active); }
+  /* Mention d'un personnage APRÈS le chapitre de sa mort : incohérence
+     probable (réutilisation d'un mort). Signalée en rouge. */
+  .mention-dead { color: #c0392b; border-bottom-color: #c0392b; border-bottom-style: solid; }
+  :root[data-theme="sombre"] .mention-dead { color: #ff8a7a; border-bottom-color: #ff8a7a; }
+
+  /* ---- Barre d'état ---- */
+  #statusbar {
+    display: flex; gap: 1rem; align-items: center;
+    padding: .25rem .8rem;
+    background: var(--panel);
+    border-top: 1px solid var(--panel-border);
+    font-size: .8rem; color: var(--muted);
+  }
+  #status-msg { flex: 1; }
+  #status-msg.error { color: #c0392b; }
+  :root[data-theme="sombre"] #status-msg.error { color: #ff8a7a; }
+
+  /* ---- Boîtes de dialogue ---- */
+  dialog {
+    border: 1px solid var(--panel-border); border-radius: 10px;
+    background: var(--bg); color: var(--fg);
+    padding: 1.2rem; min-width: min(28rem, 92vw);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog h2 { margin: 0 0 .8rem; font-size: 1.1rem; }
+  .field { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .7rem; }
+  .field label { font-size: .8rem; color: var(--muted); }
+  .field input, .field textarea {
+    font: inherit; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .45rem .55rem;
+  }
+  .field textarea { resize: vertical; min-height: 4rem; }
+  .hint { margin: 0 0 .8rem; font-size: .8rem; color: var(--muted); }
+  .settings-msg { min-height: 1.1rem; font-size: .8rem; color: var(--accent); margin: .2rem 0 .4rem; }
+  #shortcutList { display: flex; flex-direction: column; gap: .3rem; max-height: 50vh; overflow-y: auto; }
+  .shortcut-row { display: flex; align-items: center; gap: .6rem; }
+  .shortcut-row .sc-label { flex: 1; font-size: .9rem; }
+  .shortcut-row .sc-combo {
+    font: inherit; font-size: .82rem; color: var(--fg);
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .3rem .55rem; min-width: 8rem; cursor: pointer; text-align: center;
+  }
+  .shortcut-row .sc-combo:hover { background: var(--btn-hover); }
+  .shortcut-row .sc-combo.recording { border-color: var(--accent); color: var(--accent); font-style: italic; }
+  .shortcut-row .sc-clear {
+    font: inherit; color: var(--muted); background: transparent; border: none; cursor: pointer;
+    padding: .2rem .4rem; border-radius: 6px;
+  }
+  .shortcut-row .sc-clear:hover { background: var(--btn-hover); color: var(--fg); }
+  #coherenceDialog { min-width: min(40rem, 92vw); }
+  #coherenceBody { max-height: 60vh; overflow-y: auto; }
+  .coh-section { margin-bottom: 1rem; }
+  .coh-section h3 { margin: 0 0 .3rem; font-size: .95rem; display: flex; align-items: center; gap: .4rem; }
+  .coh-count { font-size: .78rem; color: #fff; border-radius: 999px; padding: .05rem .5rem; }
+  .coh-count.ok { background: #3a9d5d; }
+  .coh-count.warn { background: #c9a227; }
+  .coh-count.bad { background: #c0392b; }
+  .coh-hint { font-size: .78rem; color: var(--muted); margin: 0 0 .4rem; }
+  .coh-list { list-style: none; margin: 0; padding: 0; }
+  .coh-item { padding: .35rem .5rem; border-radius: 6px; font-size: .85rem; }
+  .coh-item.clickable { cursor: pointer; }
+  .coh-item.clickable:hover { background: var(--btn-hover); }
+  .coh-item .coh-sub { font-size: .76rem; color: var(--muted); }
+  .coh-empty { font-size: .82rem; color: var(--muted); font-style: italic; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .4rem; }
+  .dialog-actions button {
+    font: inherit; padding: .45rem .9rem; border-radius: 6px;
+    border: 1px solid var(--panel-border); background: var(--btn); color: var(--fg); cursor: pointer;
+  }
+  .dialog-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ---------------------------------------------------------------- */
+  /* Comparaison de deux versions                                      */
+  /*                                                                   */
+  /* Les deux textes vivent dans UNE grille à deux colonnes, et non     */
+  /* dans deux panneaux dont on synchroniserait le défilement en JS.    */
+  /* Chaque ligne de la grille contient les deux versions d'un même     */
+  /* passage : elles restent donc alignées PAR CONSTRUCTION, sans       */
+  /* dérive possible, et un paragraphe ajouté d'un côté laisse un vide  */
+  /* en face au lieu de décaler tout le reste. Le défilement est commun */
+  /* — ce qui est le but — sans le code fragile que demanderait la      */
+  /* synchronisation de deux barres.                                   */
+  /* ---------------------------------------------------------------- */
+  #compareView { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #compareHead {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .5rem .8rem;
+    background: var(--panel); border-bottom: 1px solid var(--panel-border);
+  }
+  #compareHead .cmp-titre { font-weight: 600; }
+  #compareHead .cmp-stats { font-size: .85rem; color: var(--muted); }
+  #compareHead .spacer { flex: 1; }
+  #compareHead button {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .3rem .7rem; cursor: pointer;
+  }
+  #compareHead button:hover { background: var(--btn-hover); }
+
+  #compareLegend { display: flex; gap: 1rem; font-size: .82rem; color: var(--muted); }
+  #compareLegend .diff-del, #compareLegend .diff-add { font-weight: 600; }
+
+  #compareGrid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.2rem;
+    align-items: start;
+    overflow-y: auto; flex: 1;
+    padding: 1rem 1.2rem 4rem;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.55;
+  }
+  #compareGrid .cmp-entete {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg); border-bottom: 1px solid var(--panel-border);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: .8rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; padding: .2rem 0 .4rem;
+  }
+  .cmp-cell { padding: .2rem .45rem; border-radius: 5px; margin: .1rem 0; }
+  .cmp-cell p { margin: 0; text-align: justify; }
+  .cmp-cell h1, .cmp-cell h2, .cmp-cell h3,
+  .cmp-cell h4, .cmp-cell h5, .cmp-cell h6 {
+    margin: .8em 0 .3em; line-height: 1.25;
+  }
+  .cmp-cell h1 { font-size: 1.35em; }
+  .cmp-cell h2 { font-size: 1.15em; }
+  .cmp-cell h3, .cmp-cell h4, .cmp-cell h5, .cmp-cell h6 { font-size: 1em; }
+
+  /* Fond des lignes modifiées : assez visible pour repérer le passage en
+     défilant, assez discret pour rester lisible. */
+  .cmp-cell.modifie   { background: rgba(201, 162, 39, .12); }
+  .cmp-cell.ajoute    { background: rgba(30, 122, 69, .13); }
+  .cmp-cell.supprime  { background: rgba(192, 57, 43, .12); }
+  /* Case sans vis-à-vis : hachures légères, pour montrer qu'il n'y a
+     rien plutôt que de laisser croire à un texte manquant. */
+  .cmp-cell.absente {
+    background: repeating-linear-gradient(45deg,
+      transparent, transparent 6px,
+      var(--panel-border) 6px, var(--panel-border) 7px);
+    opacity: .5; min-height: 1.2em;
+  }
+
+  .diff-del { color: #c0392b; text-decoration: line-through; }
+  .diff-add { color: #1e7a45; text-decoration: underline; font-weight: 600; }
+  :root[data-theme="sombre"] .diff-del { color: #ff8a7a; }
+  :root[data-theme="sombre"] .diff-add { color: #7fd6a0; }
+
+  #compareEmpty {
+    padding: 3rem; text-align: center; color: var(--muted); font-style: italic;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Correcteur orthographique (fin de Phase 1)                        */
+  /*                                                                   */
+  /* Soulignement ondulé rouge, sans fond ni changement de couleur du  */
+  /* texte : la faute doit se remarquer sans défigurer la page ni      */
+  /* gêner la lecture de ce qu'on est en train d'écrire.               */
+  /* ---------------------------------------------------------------- */
+  .faute {
+    text-decoration: underline wavy #c0392b;
+    text-decoration-skip-ink: none;
+    text-underline-offset: .18em;
+  }
+  :root[data-theme="sombre"] .faute { text-decoration-color: #ff7d6b; }
+
+  /* Menu contextuel : corrections, synonymes, dictionnaire personnel. */
+  #wordMenu {
+    position: fixed; z-index: 50; min-width: 12rem; max-width: 20rem;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--panel-border); border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    padding: .25rem; font-size: .9rem;
+    max-height: 60vh; overflow-y: auto;
+  }
+  #wordMenu .wm-item {
+    display: block; width: 100%; text-align: left;
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: .35rem .6rem; border-radius: 5px; cursor: pointer;
+  }
+  #wordMenu .wm-item:hover { background: var(--btn-hover); }
+  #wordMenu .wm-suggest { font-weight: 600; }
+  #wordMenu .wm-head {
+    padding: .3rem .6rem .15rem; font-size: .74rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  #wordMenu .wm-sep { height: 1px; background: var(--panel-border); margin: .25rem .3rem; }
+  /* Ligne de synonyme : le libellé remplace le mot, la croix écarte le
+     synonyme pour de bon (correction enregistrée dans le projet). */
+  #wordMenu .wm-row { display: flex; align-items: center; }
+  #wordMenu .wm-row .wm-item { flex: 1; }
+  #wordMenu .wm-drop {
+    font: inherit; font-size: .8rem; line-height: 1;
+    background: none; border: 0; color: var(--muted);
+    padding: .3rem .45rem; margin-right: .15rem;
+    border-radius: 5px; cursor: pointer; opacity: 0;
+  }
+  #wordMenu .wm-row:hover .wm-drop { opacity: 1; }
+  #wordMenu .wm-drop:hover { background: var(--btn-hover); color: #c0392b; }
+  #wordMenu .wm-empty { padding: .35rem .6rem; color: var(--muted); font-style: italic; }
+  #spellStatus { font-size: .82rem; color: var(--muted); margin: .2rem 0 .6rem; }
+  #personalList { max-height: 12rem; overflow-y: auto; margin-top: .4rem; }
+  .perso-row {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .2rem .3rem; border-bottom: 1px solid var(--panel-border);
+  }
+  .perso-row span { flex: 1; }
+  .perso-row button {
+    font: inherit; font-size: .8rem; background: none; color: var(--muted);
+    border: 0; cursor: pointer; padding: .1rem .35rem; border-radius: 5px;
+  }
+  .perso-row button:hover { background: var(--btn-hover); color: var(--fg); }
+
+  /* ---------------------------------------------------------------- */
+  /* Export et vue d'impression (Phase 4)                              */
+  /*                                                                   */
+  /* L'export PDF passe par le moteur de rendu du webview : on lui     */
+  /* donne à imprimer CETTE page, après l'avoir basculée en « vue      */
+  /* d'impression » (#printRoot seul visible). D'où deux jeux de       */
+  /* règles : body.printing pour l'écran (l'auteur voit ce qui part à  */
+  /* l'impression) et @media print pour le rendu réel.                 */
+  /* ---------------------------------------------------------------- */
+  #exportDialog { min-width: min(40rem, 94vw); }
+  #exportDialog .field-row { align-items: center; }
+  #exportDialog .cover-row { display: flex; gap: .5rem; align-items: center; }
+  #exportDialog .cover-row input { flex: 1; }
+  #exportCoverPreview {
+    max-width: 7rem; max-height: 9rem; border: 1px solid var(--panel-border);
+    border-radius: 4px; object-fit: contain; background: var(--panel);
+  }
+  #exportBody { max-height: 62vh; overflow-y: auto; }
+  .export-cols { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+  .export-cols > div { flex: 1 1 16rem; }
+  #exportMsg { font-size: .82rem; color: var(--muted); min-height: 1.2em; }
+  #exportMsg.error { color: #c0392b; }
+
+  /* Le livre s'imprime toujours sur fond blanc, quel que soit le thème
+     de l'éditeur : c'est une feuille de papier, pas une interface. */
+  #printRoot {
+    background: #ffffff; color: #111111;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12pt; line-height: 1.5;
+    max-width: 44em; margin: 0 auto; padding: 2rem;
+    overflow-y: auto; flex: 1;
+  }
+  #printRoot h1, #printRoot h2, #printRoot h3,
+  #printRoot h4, #printRoot h5, #printRoot h6 {
+    text-align: center; line-height: 1.25; break-after: avoid; page-break-after: avoid;
+  }
+  /* Chaque chapitre (titre de niveau 1) commence une nouvelle page. */
+  #printRoot h1 { font-size: 1.7em; margin: 2em 0 1.3em; break-before: page; page-break-before: always; }
+  #printRoot h1.pv-first { break-before: auto; page-break-before: auto; }
+  #printRoot h2 { font-size: 1.3em; margin: 1.8em 0 .9em; }
+  #printRoot h3 { font-size: 1.1em; margin: 1.6em 0 .8em; }
+  #printRoot h4, #printRoot h5, #printRoot h6 { font-size: 1em; margin: 1.4em 0 .7em; }
+  #printRoot p { margin: 0; text-indent: 1.2em; text-align: justify; }
+  #printRoot h1 + p, #printRoot h2 + p, #printRoot h3 + p,
+  #printRoot h4 + p, #printRoot h5 + p, #printRoot h6 + p,
+  #printRoot .pv-field + p, #printRoot figure + p { text-indent: 0; }
+  #printRoot .s-bold { font-weight: 700; }
+  #printRoot .s-italic { font-style: italic; }
+
+  #printRoot .pv-title-page {
+    text-align: center; break-after: page; page-break-after: always;
+    display: flex; flex-direction: column; justify-content: center;
+    min-height: 90vh;
+  }
+  #printRoot .pv-cover { max-width: 70%; max-height: 55vh; margin: 0 auto 1.5rem; display: block; }
+  #printRoot .pv-book-title { font-size: 2.1em; margin: .3em 0; break-before: auto; page-break-before: auto; }
+  #printRoot .pv-author { font-size: 1.2em; text-indent: 0; text-align: center; margin: .5em 0 0; }
+  #printRoot .pv-summary { text-indent: 0; font-style: italic; margin-top: 3em; text-align: left; }
+  #printRoot .pv-toc { break-after: page; page-break-after: always; }
+  #printRoot .pv-toc h1 { break-before: auto; page-break-before: auto; }
+  #printRoot .pv-toc ol { list-style: none; padding: 0; margin: 0; }
+  #printRoot .pv-toc li { margin: .4em 0; text-align: left; }
+  #printRoot .pv-toc li.lvl2 { margin-left: 1.5em; font-size: .95em; }
+  #printRoot .pv-toc li.lvl3 { margin-left: 3em; font-size: .9em; }
+  #printRoot .pv-field { text-indent: 0; margin-top: .7em; }
+  #printRoot .pv-field-label { font-weight: 700; }
+  #printRoot ul.pv-list { margin: .2em 0 .4em 1.4em; padding: 0; }
+  #printRoot figure { margin: .8em 0; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+  #printRoot figure img { max-width: 100%; max-height: 12cm; }
+
+  /* Pendant l'export : l'écran montre exactement ce qui part à
+     l'impression. Le !important est nécessaire pour l'emporter sur les
+     règles à sélecteur #id des éléments d'interface. */
+  body.printing > *:not(#printRoot) { display: none !important; }
+
+  @media print {
+    body > *:not(#printRoot) { display: none !important; }
+    body { display: block; }
+    #printRoot {
+      display: block !important;
+      max-width: none; margin: 0; padding: 0; font-size: 11pt;
+    }
+    /* Pas de règle @page ici : les marges et le format de page viennent
+       des réglages d'impression passés au moteur (voir main_webview.cpp).
+       Les redéfinir en CSS prendrait le pas sur le choix de l'auteur. */
+  }

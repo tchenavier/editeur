@@ -86,6 +86,11 @@ cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_speller.exe"
 if %errorlevel% neq 0 exit /b 1
 
+echo === Compilation test_diff ===
+cl %FLAGS% %INC% utils\Utf8.cpp core\Speller.cpp core\Diff.cpp core\test_diff.cpp ^
+   /Fo"%OUT%\\" /Fe"%OUT%\test_diff.exe"
+if %errorlevel% neq 0 exit /b 1
+
 echo === Compilation test_bridge ===
 cl %FLAGS% %INC% %SRC_ALL% Bridge\test_bridge.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_bridge.exe"
@@ -106,6 +111,7 @@ call :run test_epub
 call :run test_utils
 call :run test_project
 call :run test_speller
+call :run test_diff
 call :run test_bridge
 
 echo.

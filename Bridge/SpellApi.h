@@ -18,6 +18,10 @@
 //                       (et l'écrit à côté du manuscrit).
 //   spell.removeWord -> { word, path? }
 //   spell.ignore     -> { word }  ignoré jusqu'à la fermeture seulement.
+//   spell.excludeSynonym -> { word, synonym }  déclare que ce n'est pas un
+//                       synonyme. La correction est enregistrée dans un
+//                       fichier VERSIONNÉ du projet et vaut dans les deux
+//                       sens (voir io/Thesaurus.h pour le pourquoi).
 //
 // CHARGEMENT PARESSEUX : développer les 84 000 lemmes du dictionnaire
 // français en 454 000 formes prend environ une seconde. Le faire au
@@ -54,6 +58,11 @@ public:
     // Chemin du dictionnaire personnel associé à un manuscrit.
     static std::filesystem::path personalPathFor(const std::filesystem::path& manuscript);
 
+    // Fichier des synonymes écartés. Il appartient au PROJET (versionné),
+    // pas aux dépendances téléchargées : c'est ce qui lui permet de
+    // survivre à un fetch_deps et de suivre le dépôt.
+    static std::filesystem::path exclusionsPath();
+
 private:
     core::Speller m_speller;
     io::Thesaurus m_thesaurus;
@@ -69,6 +78,7 @@ private:
     json addWord(const json& payload);
     json removeWord(const json& payload);
     json ignore(const json& payload);
+    json excludeSynonym(const json& payload);
 
     // Charge le dictionnaire personnel du manuscrit donné, et retient son
     // emplacement pour les ajouts ultérieurs.

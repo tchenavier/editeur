@@ -39,6 +39,7 @@
 #include "CardApi.h"
 #include "ExportApi.h"
 #include "FileApi.h"
+#include "CompareApi.h"
 #include "ProjectApi.h"
 #include "SpellApi.h"
 #include "NativeDialog.h"
@@ -293,28 +294,74 @@ bridge::json exportPdf(const bridge::json& payload) {
 }
 #endif // _WIN32
 
-// Charge l'interface depuis ui/index.html (auto-contenue : CSS + JS
-// inclus, aucune ressource externe). On essaie plusieurs chemins
-// relatifs car l'exécutable peut être lancé depuis des dossiers de build
-// variés pendant le développement.
+// Charge l'interface et l'ASSEMBLE en une page unique.
 //
-// NOTE (production) : à terme, le HTML sera embarqué dans le binaire à la
-// compilation (ressource) pour garder un exécutable unique, comme prévu
-// au cadrage. La lecture sur disque est un confort de développement (on
-// modifie l'UI sans recompiler). Le littéral kIndexHtml plus bas sert de
-// filet de sécurité si le fichier est introuvable.
+// L'interface est écrite en trois fichiers voisins — ui/index.html,
+// ui/style.css et ui/app.js — parce qu'un fichier de 220 Ko est
+// pénible à parcourir. Mais la page est fournie au moteur de rendu par
+// set_html, c'est-à-dire SANS ORIGINE : un <link href="style.css"> ou un
+// <script src="app.js"> n'y désignerait aucun emplacement atteignable et
+// ne chargerait rien. On remplace donc ces deux balises par le contenu
+// des fichiers avant de livrer la page.
+//
+// L'interface reste ainsi parfaitement auto-contenue à l'exécution (aucune
+// ressource extérieure, ce qu'exige le cadrage), tout en restant découpée
+// à l'écriture. Ouvrir ui/index.html directement dans un navigateur
+// fonctionne aussi : là, les deux balises sont résolues normalement.
+//
+// NOTE (production) : à terme, ces fichiers seront embarqués dans le
+// binaire à la compilation, comme prévu au cadrage. La lecture sur disque
+// est un confort de développement — modifier l'interface ne demande pas
+// de recompiler, seulement de relancer. Le littéral kIndexHtml plus bas
+// sert de filet de sécurité si les fichiers sont introuvables.
+std::string readFileOrEmpty(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return "";
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// Remplace la première occurrence de 'marker' par 'replacement'.
+// Retourne false si le repère est absent : l'appelant préfère alors la
+// page de repli à une interface amputée de son style ou de son code.
+bool replaceOnce(std::string& text, const std::string& marker,
+                 const std::string& replacement) {
+    const size_t position = text.find(marker);
+    if (position == std::string::npos) return false;
+    text.replace(position, marker.size(), replacement);
+    return true;
+}
+
 std::string loadUiHtml() {
-    const char* candidates[] = {
-        "ui/index.html", "../ui/index.html",
-        "../../ui/index.html", "../../../ui/index.html",
-    };
-    for (const char* path : candidates) {
-        std::ifstream in(path, std::ios::binary);
-        if (in) {
-            std::ostringstream ss;
-            ss << in.rdbuf();
-            return ss.str();
+    // Dossiers candidats : l'exécutable peut être lancé depuis divers
+    // dossiers de build pendant le développement.
+    const char* folders[] = { "ui/", "../ui/", "../../ui/", "../../../ui/" };
+
+    for (const char* folder : folders) {
+        std::string html = readFileOrEmpty(std::string(folder) + "index.html");
+        if (html.empty()) continue;
+
+        const std::string css = readFileOrEmpty(std::string(folder) + "style.css");
+        const std::string js = readFileOrEmpty(std::string(folder) + "app.js");
+        if (css.empty() || js.empty()) {
+            // index.html sans ses deux compagnons : mieux vaut la page de
+            // repli, qui annonce clairement le problème, qu'une interface
+            // sans style ni comportement.
+            return "";
         }
+
+        // Le contenu inséré n'est jamais échappé : ce sont NOS fichiers,
+        // pas des données d'utilisateur. La seule précaution utile serait
+        // qu'ils ne contiennent pas de balise fermante parasite, ce que le
+        // navigateur signalerait immédiatement.
+        if (!replaceOnce(html, "<link rel=\"stylesheet\" href=\"style.css\">",
+                         "<style>\n" + css + "\n</style>") ||
+            !replaceOnce(html, "<script src=\"app.js\"></script>",
+                         "<script>\n" + js + "\n</script>")) {
+            return ""; // repères absents : index.html ne correspond plus
+        }
+        return html;
     }
     return "";
 }
@@ -418,9 +465,13 @@ int main() {
     // dictionnaires ne sont PAS chargés ici : l'interface le demandera
     // une fois la fenêtre affichée (voir SpellApi.h).
     bridge::SpellApi spellApi;
+    // Comparaison de versions : relire une correction, ou voir ce qui
+    // diffère avant d'écraser un fichier modifié en dehors de l'éditeur.
+    bridge::CompareApi compareApi(document);
     if (!editorApi.registerOn(dispatcher) || !fileApi.registerOn(dispatcher) ||
         !cardApi.registerOn(dispatcher) || !exportApi.registerOn(dispatcher) ||
-        !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher)) {
+        !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher) ||
+        !compareApi.registerOn(dispatcher)) {
         return 1; // conflit de noms de commandes : bug de câblage, on refuse de démarrer
     }
 

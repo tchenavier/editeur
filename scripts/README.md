@@ -116,6 +116,70 @@ ses fichiers ont été contrôlées à part, avec `System.IO.Compression` et
 
 ---
 
+## L'interface : trois fichiers, une page
+
+`ui/` contient trois fichiers voisins — `index.html` (structure), `style.css` et
+`app.js` — parce qu'un fichier unique de 220 Ko est pénible à parcourir.
+
+**Mais l'application ne charge pas ces fichiers séparément.** Sa page lui est
+fournie par `set_html`, c'est-à-dire **sans origine** : un
+`<link href="style.css">` ou un `<script src="app.js">` n'y désignerait aucun
+emplacement atteignable et ne chargerait rien. `loadUiHtml`
+(`Bridge/main_webview.cpp`) remplace donc ces deux balises par le contenu des
+fichiers avant de livrer la page. L'interface reste ainsi parfaitement
+auto-contenue à l'exécution, comme l'exige le cadrage, tout en restant découpée
+à l'écriture.
+
+Deux conséquences à connaître :
+
+- **Les deux balises sont des repères, pas de la décoration.** Les modifier dans
+  `index.html` sans modifier `loadUiHtml` fait basculer l'application sur sa page
+  de repli. Le code refuse d'ailleurs de livrer une interface amputée : si un des
+  trois fichiers manque, il rend la page de repli plutôt qu'un éditeur sans style.
+- **Ouvrir `ui/index.html` dans un navigateur fonctionne toujours** : là, les
+  balises sont résolues normalement. C'est ainsi qu'on teste l'interface sans
+  lancer l'application (le backend simulé prend le relais).
+
+Modifier l'interface ne demande **pas** de recompiler : les trois fichiers sont
+relus à chaque lancement.
+
+## Comparer deux versions
+
+Bouton « ⇄ Comparer » : on choisit un fichier (une sauvegarde horodatée, une
+version corrigée) et les deux textes s'ouvrent côte à côte, différences en
+évidence. Le même écran s'ouvre depuis le dialogue de **conflit de fichier**,
+où « écraser ou renoncer » était jusqu'ici un choix aveugle.
+
+Deux propriétés, et comment elles sont obtenues (`core/Diff`) :
+
+- **Le style est ignoré** — gratuitement. Le modèle range le texte d'un côté et
+  les plages de gras/italique de l'autre : comparer les textes ignore le
+  formatage par construction, sans rien filtrer.
+- **Le décalage est absorbé** — c'est tout le travail. Insérer un mot décale la
+  suite du paragraphe ; une comparaison position par position signalerait tout
+  le reste comme modifié. L'alignement se fait donc à **deux étages** : les
+  blocs d'abord (un paragraphe ajouté ne contamine pas ses voisins), puis les
+  mots dans les blocs qui diffèrent.
+
+Méthode d'alignement : retrait des débuts et fins communs (une correction est
+presque toujours locale), puis appui sur les éléments **uniques de chaque côté**
+— ils ne peuvent correspondre qu'à un seul vis-à-vis et découpent le problème en
+morceaux sûrs — et enfin, pour le résidu, une plus longue sous-séquence commune
+**bornée en mémoire** : au-delà, le segment est déclaré réécrit plutôt que de
+faire enfler un calcul quadratique.
+
+Ce qui compte comme une différence : **la casse et les accents** (« Le chat »
+corrigé en « le chat » est une modification, et « eleve » n'est pas « élevé »).
+Ce qui n'en est pas une : espace insécable, apostrophe courbe, espaces
+multiples — les signaler serait du bruit constant.
+
+**L'affichage n'utilise aucune synchronisation de défilement.** Les deux textes
+sont posés dans **une seule grille à deux colonnes** : chaque ligne porte les
+deux versions d'un même passage, donc elles restent alignées par construction,
+sans dérive, et un paragraphe ajouté d'un côté laisse un vide hachuré en face au
+lieu de décaler tout le reste. Mesuré : chaque paire de cellules partage
+exactement le même sommet.
+
 ## Ajouter un module
 
 Rien à déclarer nulle part. `scripts\sources.bat` **découvre** les sources :
@@ -261,6 +325,35 @@ Trois règles de découpage, chacune pour une bonne raison :
 Le **dictionnaire personnel** (`<nom>_dictionnaire.txt`, à côté du manuscrit)
 contient les noms inventés du roman. Il suit le projet, se lit à l'œil nu, et
 entre dans l'inventaire du projet.
+
+### Corriger le thésaurus
+
+Le dictionnaire de synonymes est **associatif plus que strictement
+synonymique** : il mêle de vrais synonymes, des mots apparentés, et quelques
+erreurs franches — « gâteau » y figure comme synonyme de « noir ».
+
+**Aucun filtre automatique ne peut les distinguer**, et ce n'est pas faute
+d'avoir essayé. La réciprocité paraissait prometteuse (si B est synonyme de A,
+A l'est de B), mais mesurée sur les 422 898 couples du fichier elle se révèle
+inutilisable : 98,9 % des couples sont réciproques, les erreurs le sont *aussi*
+(l'entrée « gâteau » cite « noir » en retour), et les 4 122 couples asymétriques
+qu'un tel filtre supprimerait sont en majorité de bons synonymes
+(*abattu → fatigué*, *abolir → rompre*). Le critère fait exactement l'inverse de
+ce qu'on attend de lui.
+
+La correction vient donc de l'auteur : la croix à côté d'un synonyme, dans le
+menu contextuel, l'écarte définitivement. Les couples sont conservés dans
+[`data/synonymes_exclus.txt`](../data/synonymes_exclus.txt) — **un fichier du
+projet, versionné**, et non le fichier de dictionnaire lui-même, qui est
+retéléchargeable : toute retouche y serait effacée au prochain `fetch_deps.bat`,
+sans le moindre message.
+
+Les exclusions valent **dans les deux sens** : déclarer que « gâteau » n'est pas
+un synonyme de « noir » vaut aussi pour l'inverse. C'est la même relation
+fausse.
+
+Le menu n'affiche que **huit synonymes** : les scories arrivent en fin de liste
+(sur « fenêtre », les huit premiers sont tous justes).
 
 ---
 

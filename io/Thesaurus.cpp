@@ -50,6 +50,20 @@ bool isNumber(const std::string& value) {
     return true;
 }
 
+std::string lowered(const std::string& value) {
+    return utils::u32ToUtf8(core::toLowerFr(utils::utf8ToU32(value)));
+}
+
+// Clé d'un couple exclu : les deux mots en minuscules, ORDONNÉS. Ranger
+// « noir|gâteau » et « gâteau|noir » sous la même clé rend la symétrie
+// automatique, sans avoir à interroger le jeu deux fois par synonyme.
+std::pair<std::string, std::string> exclusionKey(const std::string& a, const std::string& b) {
+    const std::string first = lowered(a);
+    const std::string second = lowered(b);
+    return (first <= second) ? std::make_pair(first, second)
+                             : std::make_pair(second, first);
+}
+
 } // namespace
 
 bool Thesaurus::load(std::string content) {
@@ -99,6 +113,103 @@ bool Thesaurus::loadFile(const std::filesystem::path& path, std::string* errorMe
         if (errorMessage) {
             *errorMessage = "Fichier de thésaurus illisible : " + utils::pathToUtf8(path);
         }
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// Corrections (voir Thesaurus.h)
+// ---------------------------------------------------------------------
+
+bool Thesaurus::isExcluded(const std::string& word, const std::string& synonym) const {
+    if (m_exclusions.empty()) return false;
+    return m_exclusions.find(exclusionKey(word, synonym)) != m_exclusions.end();
+}
+
+bool Thesaurus::addExclusion(const std::string& word, const std::string& synonym) {
+    if (word.empty() || synonym.empty()) return false;
+    return m_exclusions.insert(exclusionKey(word, synonym)).second;
+}
+
+void Thesaurus::setExclusions(const std::vector<std::pair<std::string, std::string>>& pairs) {
+    m_exclusions.clear();
+    for (const auto& pair : pairs) addExclusion(pair.first, pair.second);
+}
+
+bool Thesaurus::loadExclusions(const std::filesystem::path& path, std::string* errorMessage) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        // Fichier absent : ce n'est PAS une erreur. Un projet neuf n'a
+        // aucune correction, et le correcteur doit fonctionner sans.
+        if (errorMessage) errorMessage->clear();
+        return false;
+    }
+    const std::string content((std::istreambuf_iterator<char>(in)),
+                              std::istreambuf_iterator<char>());
+    m_exclusions.clear();
+
+    size_t start = 0;
+    while (start <= content.size()) {
+        size_t end = content.find('\n', start);
+        if (end == std::string::npos) end = content.size();
+        std::string line = trimRight(content.substr(start, end - start));
+        start = end + 1;
+        if (line.empty() || line[0] == '#') continue;
+
+        const size_t bar = line.find('|');
+        if (bar == std::string::npos) continue; // ligne abîmée : ignorée
+        const std::string word = trimRight(line.substr(0, bar));
+        const std::string synonym = trimRight(line.substr(bar + 1));
+        if (!word.empty() && !synonym.empty()) addExclusion(word, synonym);
+    }
+    return true;
+}
+
+bool Thesaurus::saveExclusions(const std::filesystem::path& path,
+                               std::string* errorMessage) const {
+    std::string text =
+        "# Synonymes écartés du thésaurus, un couple par ligne.\n"
+        "#\n"
+        "# Ce fichier corrige les erreurs du dictionnaire de synonymes sans y\n"
+        "# toucher : celui-ci est retéléchargeable, toute retouche y serait\n"
+        "# perdue. Les exclusions valent dans LES DEUX SENS.\n"
+        "#\n"
+        "# Il se remplit depuis l'éditeur (clic droit sur un mot, puis la croix\n"
+        "# à côté d'un synonyme), mais reste modifiable à la main.\n"
+        "\n";
+    for (const auto& pair : m_exclusions) {
+        text += pair.first + "|" + pair.second + "\n";
+    }
+
+    std::error_code ec;
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path(), ec);
+
+    // Écriture atomique, comme toute écriture du projet.
+    std::filesystem::path tmp = path;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            if (errorMessage) {
+                *errorMessage = "Impossible d'écrire : " + utils::pathToUtf8(tmp);
+            }
+            return false;
+        }
+        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+        out.flush();
+        if (!out) {
+            std::error_code ignored;
+            std::filesystem::remove(tmp, ignored);
+            if (errorMessage) *errorMessage = "Échec d'écriture des corrections.";
+            return false;
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        std::error_code ignored;
+        std::filesystem::remove(tmp, ignored);
+        if (errorMessage) *errorMessage = "Échec du remplacement des corrections.";
         return false;
     }
     return true;
@@ -155,12 +266,29 @@ std::vector<ThesaurusMeaning> Thesaurus::lookup(const std::string& word) const {
     size_t offset = find(word);
     if (offset == std::string::npos) {
         // Le thésaurus est en minuscules : « Roman » doit trouver « roman ».
-        const std::string lowered =
-            utils::u32ToUtf8(core::toLowerFr(utils::utf8ToU32(word)));
-        if (lowered != word) offset = find(lowered);
+        const std::string minuscule = lowered(word);
+        if (minuscule != word) offset = find(minuscule);
     }
     if (offset == std::string::npos) return {};
-    return parseAt(offset);
+
+    std::vector<ThesaurusMeaning> meanings = parseAt(offset);
+    if (m_exclusions.empty()) return meanings;
+
+    // Retrait des couples corrigés par l'auteur. Un sens vidé de tous ses
+    // synonymes disparaît : afficher un intitulé sans rien dessous
+    // laisserait croire à un défaut d'affichage.
+    std::vector<ThesaurusMeaning> kept;
+    for (ThesaurusMeaning& meaning : meanings) {
+        std::vector<std::string> synonyms;
+        for (const std::string& synonym : meaning.synonyms) {
+            if (!isExcluded(word, synonym)) synonyms.push_back(synonym);
+        }
+        if (!synonyms.empty()) {
+            meaning.synonyms = std::move(synonyms);
+            kept.push_back(std::move(meaning));
+        }
+    }
+    return kept;
 }
 
 } // namespace io

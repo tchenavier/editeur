@@ -15,8 +15,8 @@ namespace bridge {
 // =====================================================================
 // Sérialisation du document vers JSON (pour le rendu côté JS)
 // =====================================================================
-namespace {
-
+// Déclaré dans EditorApi.h : d'autres modules du pont en ont besoin sans
+// avoir à sérialiser le bloc entier (voir CompareApi).
 const char* blockTypeName(core::BlockType type) {
     switch (type) {
         case core::BlockType::Heading1: return "h1";
@@ -28,6 +28,8 @@ const char* blockTypeName(core::BlockType type) {
         default:                        return "p";
     }
 }
+
+namespace {
 
 // Lecture optionnelle (optIndex / optBool) et obligatoire (requireIndex /
 // requireString) des champs du payload : voir Bridge.h, ces aides sont
