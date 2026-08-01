@@ -98,9 +98,10 @@ notre audit, valent mieux qu'une dépendance à suivre pendant des années.
 | `core/` | Logique métier : modèle de texte, historique, recherche, fiches, correcteur, comparaison. Aucune dépendance graphique. |
 | `io/` | Sérialisation : Markdown, YAML, fiches, XHTML, archives, EPUB, dictionnaires, inventaire et plan de synchronisation. |
 | `utils/` | Transverse : UTF-8, chemins, empreintes. |
-| `net/` | Réseau : le contrat HTTP, le transport isolé derrière une interface, le client de protocole. Rien au-dessus ne connaît WinHTTP. |
+| `net/` | Réseau : le contrat HTTP, le transport isolé derrière une interface, le client de protocole, l'exécution d'un plan. Rien au-dessus ne connaît WinHTTP. |
 | `Bridge/` | Le pont C++ ↔ JS. Ne connaît pas webview, donc testable sans interface. |
 | `ui/` | Interface auto-contenue, sans dépendance externe. N'est qu'une vue. |
+| `serveur/` | Le serveur Node.js à déposer sur la machine Debian. Ne partage aucun code avec le client : seulement le contrat écrit. |
 
 Chaque suite de tests unitaires ne compile que sa couche : c'est ce qui *prouve*
 que `core/` tient sans `io/`, et `io/` sans le pont.
@@ -109,13 +110,13 @@ que `core/` tient sans `io/`, et `io/` sans le pont.
 
 ## Qualité
 
-**19 suites, 181 cas de tests** sans framework externe, et un audit de sécurité
+**20 suites, 189 cas de tests** sans framework externe, et un audit de sécurité
 reproductible en six étapes : compilation stricte (avertissements traités comme
 des erreurs), détecteur d'erreurs mémoire, fuzzing, fuites mémoire sur toutes
 les couches, analyse statique. Tout au vert.
 
 ```bat
-scripts\build_tests.bat        REM les 19 suites
+scripts\build_tests.bat        REM les 20 suites
 scripts\security_audit.bat     REM les 6 vérifications
 scripts\fuzz_long.bat          REM campagne de fuzzing longue
 ```
@@ -160,7 +161,11 @@ pour celui-ci. Le refus est retenu et voyage avec le projet.
 
 Les jalons A (identité de projet, inventaire, journal), B (contrat HTTP
 documenté, transport isolé, client réel, moteur de synchronisation) et C
-(comptes et appairage) sont faits. Reste le serveur.
+(comptes et appairage) sont faits. Le jalon D est en cours : l'exécution d'un
+plan côté client est écrite et testée, et le serveur Node.js est écrit —
+voir [`serveur/README.md`](serveur/README.md) pour l'installer et, surtout,
+**lancer ses tests avant de lui confier quoi que ce soit** : il a été écrit sur
+une machine sans Node.js.
 
 ---
 

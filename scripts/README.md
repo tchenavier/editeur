@@ -325,9 +325,15 @@ copie.**
 | `test_sync` | Moteur de synchronisation : plan à trois inventaires, conflits, reprise |
 | `test_net` | Client de protocole contre un transport simulé, réponses hostiles |
 | `test_http` | Transport réel, contre un serveur jouet lancé par le test |
+| `test_runner` | Exécution d'un plan : panne qui arrête tout, refus isolé qui n'arrête rien |
 | `test_bridge` | Le pont de bout en bout : toutes les commandes, dont « tout marche hors ligne » et « aucun réseau tant qu'on ne se connecte pas » |
 
-19 suites, 181 cas, sans framework externe.
+20 suites, 189 cas, sans framework externe.
+
+Le serveur, lui, a ses propres tests en JavaScript (voir
+[`../serveur/README.md`](../serveur/README.md)) : ils ne demandent ni base de
+données ni configuration, mais Node.js — donc ils tournent sur la Debian, pas
+sur cette machine.
 
 Deux tests du pont ne vérifient pas une fonctionnalité mais une **promesse
 tenue**, et méritent d'être conservés tels quels :

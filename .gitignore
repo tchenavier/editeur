@@ -29,3 +29,9 @@ json-develop.zip
 # Documents de cadrage et de suivi (PDF)
 /Projet_Editeur_de_texte_-_Etat_du_projet.pdf
 /Projet_Editeur_de_texte.pdf
+
+# Serveur : la configuration contient le MOT DE PASSE DE LA BASE, elle ne
+# doit jamais être versionnée. Seul config.exemple.json l'est.
+/serveur/config.json
+/serveur/node_modules/
+/serveur/package-lock.json

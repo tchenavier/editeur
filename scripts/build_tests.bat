@@ -112,6 +112,13 @@ cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_net.exe"
 if %errorlevel% neq 0 exit /b 1
 
+echo === Compilation test_runner ===
+cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
+   io\ProjectIndex.cpp io\SyncPlan.cpp net\Transport.cpp net\SyncClient.cpp ^
+   net\SyncRunner.cpp net\test_runner.cpp ^
+   /Fo"%OUT%\\" /Fe"%OUT%\test_runner.exe"
+if %errorlevel% neq 0 exit /b 1
+
 REM test_http est la seule suite qui ouvre de vraies connexions : elle
 REM lance son propre serveur jouet sur 127.0.0.1, sur un port attribue par
 REM le systeme. Rien ne sort de la machine.
@@ -145,6 +152,7 @@ call :run test_diff
 call :run test_reflow
 call :run test_sync
 call :run test_net
+call :run test_runner
 call :run test_http
 call :run test_bridge
 
