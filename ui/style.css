@@ -495,6 +495,19 @@
   }
   #compareNotice #compareNoticeText { flex: 1; min-width: 20rem; }
   #compareNotice strong { font-weight: 600; }
+
+  /* Liste des changements d'une synchronisation. Volontairement sobre :
+     c'est une liste qu'on parcourt, pas qu'on contemple. */
+  .sync-etape {
+    font-size: .82rem; line-height: 1.5;
+    padding: .1rem 0; border-bottom: 1px solid var(--panel-border);
+    word-break: break-word;
+  }
+  .sync-etape .sync-action { color: var(--muted); }
+  .sync-etape.sync-conflit { color: #b03a2e; }
+  :root[data-theme="sombre"] .sync-etape.sync-conflit { color: #ff8a7a; }
+  #syncList { max-height: 14rem; overflow-y: auto; margin-top: .4rem; }
+  #syncSummary { margin-top: .3rem; }
   #compareNotice button {
     font: inherit; font-size: .87rem; white-space: nowrap;
     color: #5c4400; background: #fff6e0;

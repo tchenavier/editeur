@@ -13,6 +13,7 @@
 #include "ExportApi.h"
 #include "ManuscriptApi.h"
 #include "ProjectApi.h"
+#include "SyncApi.h"
 #include "TextModel.h"
 #include "UndoManager.h"
 
@@ -1283,6 +1284,88 @@ int main() {
 
         std::filesystem::remove_all(dossier, ec);
         std::cout << "Test 26 OK (aucun reseau tant qu'on ne se connecte pas)\n";
+    }
+
+    // --- Test 27 : la synchronisation refuse AVANT de toucher au réseau ---
+    //
+    // Trois conditions, dans cet ordre : un fichier, une connexion, un
+    // appairage. Chacune manquante doit donner un refus explicite — et
+    // surtout, aucune requête ne doit partir tant qu'elles ne sont pas
+    // toutes réunies. Le compteur de transports le vérifie.
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_sync";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+        const auto manuscrit = dossier / "roman.md";
+
+        core::Document doc;
+        doc.blocks().emplace_back(core::BlockType::Paragraph);
+        doc.blocks()[0].insertText(0, U"Il faisait nuit.");
+        core::UndoManager undo;
+
+        int transportsCrees = 0;
+        net::Connection connexion;
+        connexion.setTransportFactory(
+            [&transportsCrees](const std::string&) -> std::unique_ptr<net::Transport> {
+                ++transportsCrees;
+                auto transport = std::make_unique<net::FakeTransport>();
+                transport->reply(200, "api 1\nserver editeur-sync 1.0\n");
+                transport->reply(200, "token abcdef123456\nuser Élise\n");
+                // L'inventaire distant demandé par sync.plan : vide.
+                transport->reply(200, "# inventaire de projet 1\n");
+                return transport;
+            });
+
+        bridge::Bridge pont;
+        bridge::EditorApi editeur(doc, undo);
+        bridge::ManuscriptApi fichiers(doc, undo);
+        bridge::AccountApi comptes(connexion, doc);
+        bridge::SyncApi synchro(connexion, doc);
+        assert(editeur.registerOn(pont));
+        assert(fichiers.registerOn(pont));
+        assert(comptes.registerOn(pont));
+        assert(synchro.registerOn(pont));
+        assert(!synchro.registerOn(pont)); // doublon refusé
+
+        // 1. Sans fichier : refus, aucun transport.
+        assert(call(pont, "sync.plan", {{"path", ""}})["ok"] == false);
+        assert(transportsCrees == 0);
+
+        // 2. Fichier enregistré, mais pas connecté : refus.
+        assert(call(pont, "file.save", {{"path", manuscrit.string()}})["ok"] == true);
+        auto refus = call(pont, "sync.plan", {{"path", manuscrit.string()}});
+        assert(refus["ok"] == false);
+        assert(std::string(refus["error"]).find("Connectez-vous") != std::string::npos);
+        assert(transportsCrees == 0);
+
+        // 3. Connecté, mais projet pas appairé : refus. Être connecté ne
+        //    suffit pas — c'est toute la logique du jalon C.
+        assert(call(pont, "account.signIn",
+                    {{"server", "https://exemple.fr"}, {"user", "elise"},
+                     {"secret", "mot-de-passe"}, {"path", manuscrit.string()}})
+                   ["result"]["connected"] == true);
+        refus = call(pont, "sync.plan", {{"path", manuscrit.string()}});
+        assert(refus["ok"] == false);
+        assert(std::string(refus["error"]).find("appairé") != std::string::npos);
+        assert(transportsCrees == 1); // celui de la connexion, pas un de plus
+
+        // 4. Appairé : le plan se calcule enfin. Le serveur ne connaît
+        //    rien, donc tout le projet est à envoyer... mais l'appairage
+        //    est en lecture seule, donc tout est « bloqué » et annoncé
+        //    comme tel plutôt que passé sous silence.
+        assert(call(pont, "account.pair",
+                    {{"path", manuscrit.string()}, {"mode", "lecture-seule"}})["ok"] == true);
+        auto plan = call(pont, "sync.plan", {{"path", manuscrit.string()}});
+        assert(plan["ok"] == true);
+        assert(plan["result"]["mode"] == "lecture-seule");
+        assert(plan["result"]["upToDate"] == false);
+        assert(plan["result"]["counts"]["upload"] == 0);
+        assert(plan["result"]["counts"]["blocked"] >= 1);
+        assert(!plan["result"]["steps"].empty());
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 27 OK (sync : trois conditions, aucune requete avant)\n";
     }
 
     std::cout << "Tous les tests du pont sont passes.\n";

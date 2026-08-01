@@ -362,6 +362,20 @@
       <label class="check"><input type="checkbox" id="accountPropose" checked>
         Proposer d'appairer le projet ouvert quand je me connecte</label>
     </div>
+
+    <!-- Synchronisation (jalon D). Deux temps : voir, puis faire. La
+         synchronisation écrase des fichiers ; l'auteur doit pouvoir
+         regarder avant de décider. -->
+    <div class="panel-head" style="margin-top:.9rem">Synchroniser</div>
+    <div id="syncPanel" hidden>
+      <div class="field-row">
+        <button id="syncPlanBtn">Voir ce qui changerait</button>
+        <button id="syncRunBtn" hidden class="primary">Synchroniser maintenant</button>
+      </div>
+      <div id="syncSummary" class="hint"></div>
+      <div id="syncList"></div>
+    </div>
+    <p class="hint" id="syncUnavailable">Disponible une fois connecté et le projet appairé.</p>
   </div>
 
   <div id="settingsMsg" class="settings-msg"></div>

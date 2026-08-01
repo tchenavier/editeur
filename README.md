@@ -50,6 +50,12 @@ seul tenant**, paragraphes perdus, l'éditeur le voit, compare alors phrase par
 phrase, et sait **rendre au manuscrit le découpage de la version précédente**,
 titres compris, sans toucher au texte corrigé.
 
+**Retrouver son projet ailleurs.** Synchronisation avec un serveur qu'on
+héberge soi-même — jamais obligatoire, jamais automatique par défaut. L'éditeur
+montre d'abord **ce qui changerait** (à recevoir, à envoyer, en conflit), et
+n'agit qu'ensuite. Une coupure en cours de route ne perd rien : le plan se
+recalcule et reprend là où il s'était arrêté.
+
 **Publier.** Export PDF par le moteur de rendu du système (page de titre,
 couverture, table des matières, saut de page par chapitre) et export EPUB
 construit intégralement. La bible narrative s'exporte aussi, seule.
@@ -110,7 +116,7 @@ que `core/` tient sans `io/`, et `io/` sans le pont.
 
 ## Qualité
 
-**20 suites, 189 cas de tests** sans framework externe, et un audit de sécurité
+**20 suites, 191 cas de tests** sans framework externe, et un audit de sécurité
 reproductible en six étapes : compilation stricte (avertissements traités comme
 des erreurs), détecteur d'erreurs mémoire, fuzzing, fuites mémoire sur toutes
 les couches, analyse statique. Tout au vert.
@@ -136,7 +142,7 @@ l'auteur ne peut jamais y être interprété comme du code.
 | 2 | Fiches de worldbuilding, modèle extensible | **Réalisée** |
 | 3 | Lien texte ↔ fiches, détection d'incohérences | **Réalisée** |
 | 4 | Export PDF / EPUB, bible narrative | **Réalisée** |
-| 5 | Comptes, cloud, synchronisation | Amorcée — jalons A, B et C |
+| 5 | Comptes, cloud, synchronisation | Amorcée — jalons A à C faits, D en cours |
 | 6 | Site web : publication, forum, messagerie | À venir |
 
 La Phase 5 suit un principe non négociable : **la connexion ne sera jamais

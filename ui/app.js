@@ -575,6 +575,29 @@ if (typeof window.cppInvoke !== "function") {
         mockAccount.pairing.autoSync = !!p.enabled;
         return { pairing: mockAccount.pairing };
       },
+
+      // --- Synchronisation (jalon D) -----------------------------------
+      // Un plan d'exemple, pour régler l'écran sans serveur. L'exécution,
+      // elle, écrase de vrais fichiers : pas d'exemple qui vaille.
+      "sync.plan": () => ({
+        mode: "lecture-seule",
+        server: mockAccount.server || "https://exemple.fr",
+        upToDate: false,
+        bytes: 42000,
+        counts: { download: 2, upload: 1, deleteLocal: 0, deleteRemote: 0,
+                  conflict: 1, blocked: 1 },
+        steps: [
+          { action: "réception", path: "roman.md", size: 38000 },
+          { action: "réception", path: "fiches/blanche.md", size: 4000 },
+          { action: "envoi", path: "fiches/elise.md", size: 3000 },
+          { action: "conflit", path: "notes.md", size: 0 },
+          { action: "bloqué (lecture seule)", path: "brouillon.md", size: 0 },
+        ],
+      }),
+      "sync.run": () => {
+        throw new Error("Synchronisation indisponible dans l'aperçu (moteur simulé) : "
+                        + "lancez l'application.");
+      },
     };
 
     window.__mockBackend = {
@@ -3101,6 +3124,7 @@ function renderAccount() {
   document.getElementById("accountUnpairRow").hidden = (p.state !== "appaire");
   document.getElementById("accountAutoSync").checked = !!p.autoSync;
   document.getElementById("accountPropose").checked = proposePairingEnabled();
+  renderSyncPanel();
 }
 
 async function refreshAccount() {
@@ -3216,6 +3240,167 @@ document.getElementById("accountPropose").addEventListener("change", (e) => {
   setProposePairing(e.target.checked);
   setSettingsMsg(e.target.checked ? "L'appairage vous sera proposé à la connexion."
                                   : "L'appairage ne vous sera plus proposé.");
+});
+
+// --- Synchronisation (jalon D) ---------------------------------------
+//
+// Deux temps, et c'est délibéré : « voir ce qui changerait » puis
+// « synchroniser ». L'opération écrase des fichiers ; on doit pouvoir
+// regarder avant de décider, comme on compare deux versions avant
+// d'enregistrer par-dessus.
+
+const LIBELLE_ACTION = {
+  "réception": "à recevoir",
+  "envoi": "à envoyer",
+  "suppression locale": "à effacer ici",
+  "suppression distante": "à effacer sur le serveur",
+  "conflit": "en conflit",
+  "bloqué (lecture seule)": "reste ici (lecture seule)",
+};
+
+function renderSyncPanel() {
+  const utilisable = account.connected && account.pairing &&
+                     account.pairing.state === "appaire";
+  document.getElementById("syncPanel").hidden = !utilisable;
+  document.getElementById("syncUnavailable").hidden = utilisable;
+
+  // Un plan affiché décrit un état précis du compte et de l'appairage.
+  // Dès que l'un des deux change, il ne décrit plus rien : on l'efface
+  // plutôt que de laisser une liste périmée invitant à cliquer.
+  document.getElementById("syncSummary").textContent = "";
+  document.getElementById("syncList").textContent = "";
+  document.getElementById("syncRunBtn").hidden = true;
+}
+
+function renderSyncSteps(etapes) {
+  const liste = document.getElementById("syncList");
+  liste.textContent = "";
+  // Au-delà d'une certaine longueur, la liste n'informe plus : les
+  // compteurs suffisent, et l'auteur n'ira pas lire trois cents lignes.
+  for (const etape of etapes.slice(0, 40)) {
+    const ligne = document.createElement("div");
+    ligne.className = "sync-etape";
+    const quoi = document.createElement("span");
+    quoi.className = "sync-action";
+    quoi.textContent = LIBELLE_ACTION[etape.action] || etape.action;
+    const chemin = document.createElement("span");
+    chemin.textContent = " " + etape.path;
+    ligne.append(quoi, chemin);
+    liste.appendChild(ligne);
+  }
+  if (etapes.length > 40) {
+    const reste = document.createElement("div");
+    reste.className = "hint";
+    reste.textContent = "… et " + (etapes.length - 40) + " autre(s).";
+    liste.appendChild(reste);
+  }
+}
+
+function resumeDuPlan(r) {
+  if (r.upToDate) return "Tout est déjà à jour.";
+  const c = r.counts;
+  const morceaux = [];
+  if (c.download) morceaux.push(c.download + " à recevoir");
+  if (c.upload) morceaux.push(c.upload + " à envoyer");
+  if (c.deleteLocal) morceaux.push(c.deleteLocal + " à effacer ici");
+  if (c.deleteRemote) morceaux.push(c.deleteRemote + " à effacer sur le serveur");
+  if (c.conflict) morceaux.push(c.conflict + " en conflit");
+  if (c.blocked) morceaux.push(c.blocked + " bloqué(s) en lecture seule");
+  const volume = r.bytes ? " — " + Math.ceil(r.bytes / 1024) + " Ko à transférer" : "";
+  return morceaux.join(", ") + volume + ".";
+}
+
+// La synchronisation raisonne sur le FICHIER, pas sur ce qui est à
+// l'écran. Partir avec des modifications non enregistrées enverrait une
+// version périmée : on l'empêche plutôt que de le découvrir après coup.
+async function verifierEnregistre() {
+  if (!state.dirty) return true;
+  const ok = await askConfirm(
+    "Ce manuscrit a des modifications non enregistrées. La synchronisation "
+    + "travaille sur le fichier du disque : sans enregistrer, c'est la version "
+    + "précédente qui partirait.",
+    "Enregistrer puis continuer", "Modifications non enregistrées");
+  if (!ok) return false;
+  if (!state.filePath) return false;
+  try {
+    // Enregistrement à sa place, sans redemander le chemin : le fichier
+    // est déjà connu, puisque le projet est appairé.
+    await persistTo(state.filePath, false);
+    return !state.dirty;
+  } catch (err) { reportError(err); return false; }
+}
+
+document.getElementById("syncPlanBtn").addEventListener("click", async () => {
+  try {
+    setSettingsMsg("Consultation du serveur…");
+    const r = await invoke("sync.plan", { path: state.filePath || "" });
+    document.getElementById("syncSummary").textContent = resumeDuPlan(r);
+    renderSyncSteps(r.steps || []);
+    document.getElementById("syncRunBtn").hidden = !!r.upToDate;
+    setSettingsMsg("");
+  } catch (err) {
+    document.getElementById("syncSummary").textContent = "";
+    document.getElementById("syncList").textContent = "";
+    document.getElementById("syncRunBtn").hidden = true;
+    setSettingsMsg(String(err && err.message ? err.message : err), true);
+  }
+});
+
+document.getElementById("syncRunBtn").addEventListener("click", async () => {
+  if (!(await verifierEnregistre())) return;
+  try {
+    setSettingsMsg("Synchronisation en cours…");
+    const r = await invoke("sync.run", { path: state.filePath || "" });
+
+    const faits = [];
+    if (r.downloaded) faits.push(r.downloaded + " reçu(s)");
+    if (r.uploaded) faits.push(r.uploaded + " envoyé(s)");
+    if (r.deletedLocal) faits.push(r.deletedLocal + " effacé(s) ici");
+    if (r.deletedRemote) faits.push(r.deletedRemote + " effacé(s) sur le serveur");
+    document.getElementById("syncSummary").textContent =
+      faits.length ? faits.join(", ") + "." : "Rien n'a changé.";
+
+    // Ce qui n'a pas abouti est montré tel quel : un conflit passé sous
+    // silence est un travail perdu sans que personne le sache.
+    const liste = document.getElementById("syncList");
+    liste.textContent = "";
+    for (const souci of r.problems || []) {
+      const ligne = document.createElement("div");
+      ligne.className = "sync-etape" + (souci.conflict ? " sync-conflit" : "");
+      ligne.textContent = souci.path + " : " + souci.message;
+      liste.appendChild(ligne);
+    }
+
+    if (r.interrupted) {
+      setSettingsMsg("Interrompu : " + r.interruption
+                     + " Ce qui reste sera repris à la prochaine synchronisation.", true);
+    } else if (r.clean) {
+      setSettingsMsg("Synchronisation terminée.");
+    } else {
+      setSettingsMsg("Terminé, mais tout n'est pas passé — voir la liste ci-dessous.", true);
+    }
+    if (!r.baseSaved && r.baseError) {
+      setSettingsMsg("Attention : " + r.baseError, true);
+    }
+
+    // Un manuscrit reçu remplace celui qui est à l'écran.
+    if (r.reloadNeeded && state.filePath) {
+      await invoke("file.load", { path: state.filePath });
+      const doc = await invoke("editor.getDocument", {});
+      state.blocks = doc.blocks;
+      state.activeIndex = 0;
+      state.caret = { block: 0, pos: 0 };
+      rebuildChapterCache();
+      clearSpellRanges();
+      renderAll();
+      markClean();
+      checkAllBlocks();
+      setStatus("Manuscrit rechargé depuis la version synchronisée.");
+    }
+    document.getElementById("syncRunBtn").hidden = true;
+  } catch (err) {
+    setSettingsMsg(String(err && err.message ? err.message : err), true);
+  }
 });
 
 // =====================================================================

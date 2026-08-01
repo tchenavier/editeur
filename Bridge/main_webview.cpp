@@ -43,6 +43,7 @@
 #include "CompareApi.h"
 #include "ProjectApi.h"
 #include "SpellApi.h"
+#include "SyncApi.h"
 #include "NativeDialog.h"
 #include "TextModel.h"
 #include "UndoManager.h"
@@ -476,10 +477,14 @@ int main() {
     // aussi vite hors ligne qu'en ligne. Voir net/Connection.h.
     net::Connection connection;
     bridge::AccountApi accountApi(connection, document);
+    // Synchronisation (jalon D). Ne parle au réseau que si l'on est
+    // connecté ET le projet appairé : deux conditions distinctes.
+    bridge::SyncApi syncApi(connection, document);
     if (!editorApi.registerOn(dispatcher) || !fileApi.registerOn(dispatcher) ||
         !cardApi.registerOn(dispatcher) || !exportApi.registerOn(dispatcher) ||
         !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher) ||
-        !compareApi.registerOn(dispatcher) || !accountApi.registerOn(dispatcher)) {
+        !compareApi.registerOn(dispatcher) || !accountApi.registerOn(dispatcher) ||
+        !syncApi.registerOn(dispatcher)) {
         return 1; // conflit de noms de commandes : bug de câblage, on refuse de démarrer
     }
 

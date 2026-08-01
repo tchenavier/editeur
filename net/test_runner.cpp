@@ -11,11 +11,14 @@
 // permet d'écrire en une ligne des situations qu'on ne saurait pas
 // provoquer autrement.
 
+#include "DiskFileStore.h"
 #include "FakeTransport.h"
 #include "Sha256.h"
 #include "SyncRunner.h"
 
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
@@ -278,6 +281,65 @@ int main() {
         assert(rapport.problems.empty());
         assert(transport.sent.empty());
         std::cout << "Test 8 OK (plan vide)\n";
+    }
+
+    // --- Test 9 : LE DOSSIER DU PROJET EST UNE PRISON ---
+    //
+    // Les chemins traités ici viennent d'un inventaire DISTANT. Un serveur
+    // fautif ou hostile ne doit pas pouvoir faire écrire l'éditeur ailleurs
+    // que dans le dossier du manuscrit — c'est le seul endroit du client
+    // où une erreur de chemin toucherait des fichiers étrangers.
+    {
+        namespace fs = std::filesystem;
+        const fs::path racine = fs::temp_directory_path() / "test_runner_disque";
+        std::error_code ec;
+        fs::remove_all(racine, ec);
+        fs::create_directories(racine / "fiches", ec);
+
+        net::DiskFileStore disque(racine);
+
+        // Ce qui est légitime passe.
+        assert(!disque.resolve("roman.md").empty());
+        assert(!disque.resolve("fiches/elise.md").empty());
+        assert(!disque.resolve("images/couverture.png").empty());
+
+        // Tout ce qui sortirait du dossier est refusé, quelle que soit la
+        // façon de s'y prendre.
+        const char* const hostiles[] = {
+            "", "/etc/passwd", "../voisin.md", "a/../../voisin.md",
+            "dossier\\a.md", "C:/windows/x.md", "a.md:flux", "a//b.md",
+        };
+        for (const char* chemin : hostiles) {
+            assert(disque.resolve(chemin).empty());
+        }
+
+        // Et le refus va jusqu'au bout : rien n'est écrit.
+        std::string erreur;
+        assert(!disque.write("../evade.md", "contenu", &erreur));
+        assert(!erreur.empty());
+        assert(!fs::exists(racine.parent_path() / "evade.md"));
+
+        // Aller-retour réel, avec écriture atomique.
+        const std::string contenu = "# Chapitre\n\nTexte accentué : été.\n";
+        assert(disque.write("fiches/elise.md", contenu, &erreur));
+        std::string relu;
+        assert(disque.read("fiches/elise.md", relu, &erreur));
+        assert(relu == contenu);
+        // Aucun fichier temporaire ne subsiste après une écriture réussie.
+        assert(!fs::exists(racine / "fiches" / "elise.md.tmp"));
+
+        // Suppression, puis suppression d'un fichier déjà absent : le
+        // résultat voulu est atteint dans les deux cas.
+        assert(disque.remove("fiches/elise.md", &erreur));
+        assert(!fs::exists(racine / "fiches" / "elise.md"));
+        assert(disque.remove("fiches/elise.md", &erreur));
+
+        // Lire ce qui n'existe pas échoue proprement.
+        assert(!disque.read("absent.md", relu, &erreur));
+        assert(relu.empty());
+
+        fs::remove_all(racine, ec);
+        std::cout << "Test 9 OK (aucun chemin ne sort du dossier du projet)\n";
     }
 
     std::cout << "Tous les tests d'execution sont passes.\n";

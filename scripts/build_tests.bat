@@ -115,7 +115,7 @@ if %errorlevel% neq 0 exit /b 1
 echo === Compilation test_runner ===
 cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
    io\ProjectIndex.cpp io\SyncPlan.cpp net\Transport.cpp net\SyncClient.cpp ^
-   net\SyncRunner.cpp net\test_runner.cpp ^
+   net\SyncRunner.cpp net\DiskFileStore.cpp net\test_runner.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_runner.exe"
 if %errorlevel% neq 0 exit /b 1
 
