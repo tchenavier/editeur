@@ -11,7 +11,7 @@ if %errorlevel% neq 0 exit /b 1
 cd /d "C:\Users\Dev\Documents\projet\editeur"
 set OUT=%~dp0..\build\tests
 if not exist "%OUT%" mkdir "%OUT%"
-set INC=/Icore /Iio /Iutils /IBridge
+set INC=/Icore /Iio /Iutils /Inet /IBridge
 set FLAGS=/nologo /std:c++17 /utf-8 /EHsc /W4
 
 REM Sources partagees (voir sources.bat) : utilisees par la seule suite
@@ -76,7 +76,7 @@ if %errorlevel% neq 0 exit /b 1
 
 echo === Compilation test_project ===
 cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
-   io\ProjectIndex.cpp io\ChangeLog.cpp io\test_project.cpp ^
+   io\ProjectIndex.cpp io\ChangeLog.cpp io\Pairing.cpp io\test_project.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_project.exe"
 if %errorlevel% neq 0 exit /b 1
 
@@ -95,6 +95,30 @@ echo === Compilation test_reflow ===
 cl %FLAGS% %INC% utils\Utf8.cpp core\TextModel.cpp core\Speller.cpp core\Diff.cpp ^
    core\Reflow.cpp core\test_reflow.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_reflow.exe"
+if %errorlevel% neq 0 exit /b 1
+
+echo === Compilation test_sync ===
+cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
+   io\ProjectIndex.cpp io\SyncPlan.cpp io\test_sync.cpp ^
+   /Fo"%OUT%\\" /Fe"%OUT%\test_sync.exe"
+if %errorlevel% neq 0 exit /b 1
+
+REM test_net compile la couche reseau SANS le pont ni le metier : c'est ce
+REM qui prouve que le client de protocole ne depend que du transport et de
+REM l'inventaire, jamais de l'interface.
+echo === Compilation test_net ===
+cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
+   io\ProjectIndex.cpp net\Transport.cpp net\SyncClient.cpp net\test_net.cpp ^
+   /Fo"%OUT%\\" /Fe"%OUT%\test_net.exe"
+if %errorlevel% neq 0 exit /b 1
+
+REM test_http est la seule suite qui ouvre de vraies connexions : elle
+REM lance son propre serveur jouet sur 127.0.0.1, sur un port attribue par
+REM le systeme. Rien ne sort de la machine.
+echo === Compilation test_http ===
+cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
+   io\ProjectIndex.cpp net\Transport.cpp net\SyncClient.cpp net\WinHttpTransport.cpp ^
+   net\test_http.cpp /Fo"%OUT%\\" /Fe"%OUT%\test_http.exe"
 if %errorlevel% neq 0 exit /b 1
 
 echo === Compilation test_bridge ===
@@ -119,6 +143,9 @@ call :run test_project
 call :run test_speller
 call :run test_diff
 call :run test_reflow
+call :run test_sync
+call :run test_net
+call :run test_http
 call :run test_bridge
 
 echo.

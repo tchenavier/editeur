@@ -1,4 +1,4 @@
-// FileApi.h
+// ManuscriptApi.h
 // -----------------------------------------------------------------------
 // Commandes "file.*" : sérialisation Markdown, ouverture et sauvegarde
 // (écriture atomique via io/MarkdownIO), et métadonnées YAML.
@@ -48,11 +48,11 @@
 
 namespace bridge {
 
-class FileApi {
+class ManuscriptApi {
 public:
     // Mêmes règles de durée de vie qu'EditorApi : 'document' et 'undo'
     // doivent survivre au Bridge.
-    FileApi(core::Document& document, core::UndoManager& undo);
+    ManuscriptApi(core::Document& document, core::UndoManager& undo);
 
     // Enregistre toutes les commandes file.* sur le pont donné.
     // Retourne false si un nom de commande était déjà pris.

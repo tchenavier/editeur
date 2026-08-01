@@ -71,6 +71,13 @@ std::filesystem::path syncFolderFor(const std::filesystem::path& manuscriptPath)
 std::filesystem::path indexPathFor(const std::filesystem::path& manuscriptPath);
 std::filesystem::path journalPathFor(const std::filesystem::path& manuscriptPath);
 
+// L'inventaire tel qu'il était à la DERNIÈRE SYNCHRONISATION RÉUSSIE.
+// C'est le témoin qui permet de distinguer « ajouté ici » de « supprimé
+// là-bas » : sans lui, deux inventaires qui diffèrent ne disent pas qui a
+// bougé (voir io/SyncPlan.h). Fichier distinct de l'inventaire local, qui
+// lui décrit l'état courant du disque.
+std::filesystem::path basePathFor(const std::filesystem::path& manuscriptPath);
+
 // Construit l'inventaire en lisant le disque. Un fichier illisible est
 // IGNORÉ (comme une fiche abîmée au chargement) plutôt que de faire
 // échouer tout l'inventaire ; le compteur 'skipped', s'il est fourni, dit

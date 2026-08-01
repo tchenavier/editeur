@@ -28,7 +28,7 @@
 #include "EditorApi.h"
 #include "Epub.h"
 #include "ExportApi.h"
-#include "FileApi.h"
+#include "ManuscriptApi.h"
 #include "MarkdownIO.h"
 #include "PathUtf8.h"
 #include "ProjectIndex.h"
@@ -209,7 +209,7 @@ static void doWork(const fs::path& tmpDir) {
 
         bridge::Bridge dispatcher;
         bridge::EditorApi editorApi(doc, undo);
-        bridge::FileApi fileApi(doc, undo);
+        bridge::ManuscriptApi fileApi(doc, undo);
         bridge::CardApi cardApi(lib, reg);
         bridge::ExportApi exportApi(doc, lib, reg);
         editorApi.registerOn(dispatcher);

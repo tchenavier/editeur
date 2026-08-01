@@ -37,8 +37,12 @@
 #include "Speller.h"
 #include "Thesaurus.h"
 #include "MarkdownIO.h"
+#include "FakeTransport.h"
 #include "ProjectIndex.h"
 #include "Reflow.h"
+#include "SyncClient.h"
+#include "SyncPlan.h"
+#include "WinHttpTransport.h"
 #include "Sha256.h"
 #include "TextModel.h"
 #include "Utf8.h"
@@ -282,6 +286,58 @@ int main(int argc, char** argv) {
             (void)core::flatness(doc.blocks());
             (void)core::reflowLike(doc.blocks(), autre.blocks());
             (void)core::reflowLike(autre.blocks(), doc.blocks());
+        }
+
+        // 5 ter. RÉPONSES DE SERVEUR (Phase 5, jalon B). C'est une
+        //    surface d'entrée non fiable toute neuve, et d'une nature
+        //    particulière : contrairement à un fichier, elle vient d'une
+        //    machine distante que l'auteur ne contrôle pas forcément. Le
+        //    client doit encaisser n'importe quel corps, n'importe quel
+        //    code d'état et n'importe quel en-tête sans jamais rendre pour
+        //    bon ce qu'il n'a pas vérifié.
+        //
+        //    Aucune connexion n'est ouverte : le transport est simulé.
+        {
+            net::FakeTransport transport;
+            transport.failWhenEmpty = false;
+            for (int k = 0; k < 4; ++k) {
+                transport.reply(static_cast<int>(100 + (rng() % 450)), raw,
+                                raw.substr(0, 32),
+                                {{"ETag", raw.substr(0, 80)},
+                                 {"Content-Type", raw.substr(0, 40)}});
+            }
+
+            net::SyncClient client(transport, raw.substr(0, 24));
+            net::ServerInfo info;
+            (void)client.version(info);
+
+            io::ProjectIndex distant;
+            (void)client.remoteIndex("11111111-2222-4333-8444-555555555555", distant);
+            (void)client.remoteIndex(raw.substr(0, 40), distant);
+
+            std::string contenu, empreinte;
+            (void)client.readFile("11111111-2222-4333-8444-555555555555",
+                                  raw.substr(0, 60), contenu, empreinte);
+            (void)client.writeFile("11111111-2222-4333-8444-555555555555", "roman.md",
+                                   raw, raw.substr(0, 64), empreinte);
+
+            (void)net::SyncClient::isSafePath(raw);
+            (void)net::SyncClient::percentEncode(raw.substr(0, 200));
+            (void)net::SyncClient::readKey(raw, "api");
+            (void)net::findHeader({{raw.substr(0, 20), raw}}, "etag");
+#ifdef _WIN32
+            (void)net::WinHttpTransport::parseBaseUrl(raw.substr(0, 120));
+#endif
+
+            // Le moteur de synchronisation reçoit lui aussi des
+            // inventaires venus du réseau : deux inventaires quelconques
+            // doivent produire un plan, jamais un égarement.
+            const io::ProjectIndex a = io::parseIndex(raw);
+            const io::ProjectIndex b = io::parseIndex(raw.substr(raw.size() / 2) + raw);
+            const io::SyncPlan plan = io::planSync(a, b, distant, io::SyncMode::TwoWay);
+            (void)plan.bytesToTransfer();
+            (void)io::planSync(a, b, distant, io::SyncMode::ReadOnly);
+            (void)io::advanceBase(a, b, distant, plan, {raw.substr(0, 30), "roman.md"});
         }
 
         // 6. Chaîne d'EXPORT (Phase 4). Le contenu qui la traverse vient

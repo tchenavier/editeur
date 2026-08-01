@@ -46,7 +46,7 @@ REM de fichier permettait un jour d'ecraser un pointeur de fonction, le
 REM detournement serait bloque net. Cout negligeable, et l'application lit
 REM des fichiers qui ne viennent pas forcement de l'auteur.
 set FLAGS=/nologo /std:c++17 /utf-8 /EHsc /W4 /guard:cf
-set INC=/Icore /Iio /Iutils /IBridge /I"%TP%\webview" /I"%TP%\webview2"
+set INC=/Icore /Iio /Iutils /Inet /IBridge /I"%TP%\webview" /I"%TP%\webview2"
 
 echo === Compilation de l'application ===
 REM %SRC_ALL% couvre tous les modules : voir sources.bat.

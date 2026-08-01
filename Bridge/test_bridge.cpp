@@ -3,13 +3,15 @@
 // exactement comme le ferait la glue webview. C'est la preuve concrète
 // que la logique du pont est indépendante du transport.
 
+#include "AccountApi.h"
 #include "Bridge.h"
 #include "CompareApi.h"
 #include "EditorApi.h"
+#include "FakeTransport.h"
 #include "CardApi.h"
 #include "MarkdownIO.h"
 #include "ExportApi.h"
-#include "FileApi.h"
+#include "ManuscriptApi.h"
 #include "ProjectApi.h"
 #include "TextModel.h"
 #include "UndoManager.h"
@@ -35,7 +37,7 @@ int main() {
     core::UndoManager undoManager;
     bridge::Bridge dispatcher;
     bridge::EditorApi api(document, undoManager);
-    bridge::FileApi fileApi(document, undoManager);
+    bridge::ManuscriptApi fileApi(document, undoManager);
     assert(api.registerOn(dispatcher));
     assert(fileApi.registerOn(dispatcher));
 
@@ -338,7 +340,7 @@ int main() {
         core::Document doc5;
         core::UndoManager undo5;
         bridge::Bridge b5;
-        bridge::FileApi file5(doc5, undo5);
+        bridge::ManuscriptApi file5(doc5, undo5);
         assert(file5.registerOn(b5));
         doc5.blocks().emplace_back(core::BlockType::Paragraph);
         doc5.blocks()[0].insertText(0, U"Du texte");
@@ -492,7 +494,7 @@ int main() {
         d.blocks()[0].insertText(0, U"Contenu");
         core::UndoManager u;
         bridge::Bridge b8;
-        bridge::FileApi f8(d, u);
+        bridge::ManuscriptApi f8(d, u);
         assert(f8.registerOn(b8));
 
         const fs::path p = fs::temp_directory_path() / "test_editeur_conflict.md";
@@ -811,7 +813,7 @@ int main() {
         doc5.blocks().push_back(b5);
         core::UndoManager undo5;
         bridge::Bridge b6;
-        bridge::FileApi files5(doc5, undo5);
+        bridge::ManuscriptApi files5(doc5, undo5);
         bridge::ProjectApi project5(doc5);
         assert(files5.registerOn(b6));
         assert(project5.registerOn(b6));
@@ -1071,6 +1073,216 @@ int main() {
 
         std::filesystem::remove_all(dossier, ec);
         std::cout << "Test 24 OK (texte aplati : comparaison par phrases, redecoupage)\n";
+    }
+
+    // --- Test 25 : TOUT FONCTIONNE SANS RÉSEAU NI COMPTE ---
+    //
+    // C'est la garantie de la règle numéro un de la Phase 5, et elle vaut
+    // qu'on l'écrive comme un test plutôt que comme une intention : la
+    // connexion n'est JAMAIS obligatoire. Aucune commande de l'éditeur ne
+    // doit dépendre d'un serveur, d'un jeton ou d'un appairage.
+    //
+    // Le montage est celui de l'application réelle — toutes les API
+    // enregistrées sur un même pont — et rien n'est connecté. Si un jour
+    // quelqu'un branche un appel réseau dans une commande d'édition, ce
+    // test tombe.
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_hors_ligne";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+
+        core::Document doc;
+        doc.blocks().emplace_back(core::BlockType::Paragraph);
+        core::UndoManager undo;
+        core::CardLibrary bibliotheque;
+        core::SchemaRegistry schemas;
+
+        bridge::Bridge pont;
+        bridge::EditorApi editeur(doc, undo);
+        bridge::ManuscriptApi fichiers(doc, undo);
+        bridge::CardApi fiches(bibliotheque, schemas);
+        bridge::ExportApi exportation(doc, bibliotheque, schemas);
+        bridge::ProjectApi projet(doc);
+        bridge::CompareApi comparaison(doc, undo);
+        assert(editeur.registerOn(pont));
+        assert(fichiers.registerOn(pont));
+        assert(fiches.registerOn(pont));
+        assert(exportation.registerOn(pont));
+        assert(projet.registerOn(pont));
+        assert(comparaison.registerOn(pont));
+
+        const auto manuscrit = dossier / "roman.md";
+        const std::string chemin = manuscrit.string();
+
+        // Un parcours d'écriture complet, de bout en bout, hors ligne.
+        struct Etape { const char* commande; json charge; };
+        const std::vector<Etape> parcours = {
+            {"editor.insertText", {{"block", 0}, {"pos", 0}, {"text", "Il faisait nuit."}}},
+            {"editor.applyStyle", {{"block", 0}, {"pos", 0}, {"count", 2}, {"style", "bold"}}},
+            {"editor.setBlockType", {{"block", 0}, {"type", "h1"}}},
+            {"editor.wordCount", json::object()},
+            {"editor.find", {{"query", "nuit"}, {"rangeStart", 0}, {"rangeEnd", 1}}},
+            {"editor.undo", json::object()},
+            {"editor.redo", json::object()},
+            {"editor.getDocument", json::object()},
+            {"file.setMetadata", {{"title", "Roman"}, {"author", "Autrice"}}},
+            {"file.save", {{"path", chemin}}},
+            {"file.load", {{"path", chemin}}},
+            {"cards.schemas", json::object()},
+            {"cards.save", {{"type", "personnage"}, {"title", "Élise"}}},
+            {"cards.list", json::object()},
+            {"cards.search", {{"query", "éli"}}},
+            {"cards.checkRefs", json::object()},
+            {"project.snapshot", {{"path", chemin}}},
+            {"project.state", {{"path", chemin}}},
+            {"project.history", {{"path", chemin}}},
+            {"compare.withFile", {{"path", chemin}}},
+            {"export.epub", {{"path", (dossier / "roman.epub").string()}}},
+        };
+
+        for (const Etape& etape : parcours) {
+            const auto reponse = call(pont, etape.commande, etape.charge);
+            if (reponse["ok"] != true) {
+                std::cout << "*** " << etape.commande << " a echoue hors ligne : "
+                          << reponse.dump() << "\n";
+            }
+            assert(reponse["ok"] == true);
+        }
+
+        // Et le manuscrit est bien sur le disque, sans qu'aucun compte
+        // n'ait été demandé.
+        assert(std::filesystem::exists(manuscrit));
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 25 OK (tout fonctionne sans reseau ni compte)\n";
+    }
+
+    // --- Test 26 : LE RÉSEAU N'EXISTE PAS TANT QU'ON NE S'EST PAS CONNECTÉ ---
+    //
+    // Exigence explicite : la partie réseau ne doit s'activer QUE lorsque
+    // l'auteur se connecte. Pas seulement « ne rien envoyer » — ne rien
+    // construire du tout : pas de session, pas de poignée système, pas de
+    // fil d'exécution. Celui qui n'utilise pas le cloud ne doit pas le
+    // payer, ni en mémoire, ni en temps de démarrage.
+    //
+    // Le test compte les transports réellement fabriqués. Si quelqu'un
+    // branche un jour une initialisation réseau au démarrage, il tombe.
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_compte";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+        const auto manuscrit = dossier / "roman.md";
+
+        core::Document doc;
+        doc.blocks().emplace_back(core::BlockType::Paragraph);
+        doc.blocks()[0].insertText(0, U"Il faisait nuit.");
+        core::UndoManager undo;
+
+        // Un compteur de créations : c'est LA mesure de la paresse.
+        int transportsCrees = 0;
+        net::FakeTransport* dernier = nullptr;
+
+        net::Connection connexion;
+        connexion.setTransportFactory(
+            [&transportsCrees, &dernier](const std::string&) -> std::unique_ptr<net::Transport> {
+                ++transportsCrees;
+                auto transport = std::make_unique<net::FakeTransport>();
+                // La poignée de main, puis la session.
+                transport->reply(200, "api 1\nserver editeur-sync 0.1\n");
+                transport->reply(200, "token abcdef123456\nuser Élise\n");
+                dernier = transport.get();
+                return transport;
+            });
+
+        bridge::Bridge pont;
+        bridge::EditorApi editeur(doc, undo);
+        bridge::ManuscriptApi fichiers(doc, undo);
+        bridge::AccountApi comptes(connexion, doc);
+        assert(editeur.registerOn(pont));
+        assert(fichiers.registerOn(pont));
+        assert(comptes.registerOn(pont));
+
+        // 1. Monter l'application ne crée AUCUN transport.
+        assert(transportsCrees == 0);
+        assert(!connexion.hasTransport());
+        assert(!connexion.isConnected());
+
+        // 2. Écrire, enregistrer, consulter l'état du compte : toujours
+        //    aucun transport. C'est la vie entière d'un auteur hors ligne.
+        call(pont, "editor.insertText", {{"block", 0}, {"pos", 16}, {"text", " Elle sortit."}});
+        assert(call(pont, "file.save", {{"path", manuscrit.string()}})["ok"] == true);
+        auto etat = call(pont, "account.state", {{"path", manuscrit.string()}});
+        assert(etat["ok"] == true);
+        assert(etat["result"]["connected"] == false);
+        assert(etat["result"]["pairing"]["state"] == "aucun");
+        assert(etat["result"]["pairing"]["canPropose"] == true);
+        assert(transportsCrees == 0);
+
+        // 3. Appairer sans être connecté : refusé, et toujours rien de créé.
+        assert(call(pont, "account.pair", {{"path", manuscrit.string()}})["ok"] == false);
+        assert(transportsCrees == 0);
+
+        // 4. LA connexion. C'est le seul moment où le réseau apparaît.
+        auto connexionResultat = call(pont, "account.signIn",
+                                      {{"server", "https://exemple.fr"},
+                                       {"user", "elise"},
+                                       {"secret", "mot-de-passe"},
+                                       {"path", manuscrit.string()}});
+        assert(connexionResultat["ok"] == true);
+        assert(connexionResultat["result"]["connected"] == true);
+        assert(connexionResultat["result"]["user"] == "Élise");
+        assert(transportsCrees == 1);
+        assert(connexion.hasTransport());
+
+        // Le secret est parti dans le CORPS, jamais dans l'URL.
+        assert(dernier != nullptr);
+        bool secretVu = false;
+        for (const net::Request& envoyee : dernier->sent) {
+            assert(envoyee.path.find("mot-de-passe") == std::string::npos);
+            assert(envoyee.path.find("secret") == std::string::npos);
+            if (envoyee.body.find("mot-de-passe") != std::string::npos) secretVu = true;
+        }
+        assert(secretVu);
+
+        // 5. Appairage : trois réponses possibles, et « jamais » est définitif.
+        auto appaire = call(pont, "account.pair",
+                            {{"path", manuscrit.string()}, {"mode", "lecture-seule"}});
+        assert(appaire["ok"] == true);
+        assert(appaire["result"]["pairing"]["state"] == "appaire");
+        assert(appaire["result"]["pairing"]["mode"] == "lecture-seule");
+        // Appairer n'active pas la synchronisation automatique.
+        assert(appaire["result"]["pairing"]["autoSync"] == false);
+        assert(appaire["result"]["pairing"]["canPropose"] == false);
+
+        auto autoSync = call(pont, "account.setAutoSync",
+                             {{"path", manuscrit.string()}, {"enabled", true}});
+        assert(autoSync["result"]["pairing"]["autoSync"] == true);
+
+        auto jamais = call(pont, "account.never", {{"path", manuscrit.string()}});
+        assert(jamais["result"]["pairing"]["state"] == "jamais");
+        assert(jamais["result"]["pairing"]["canPropose"] == false);
+        // La décision survit à une relecture depuis le disque : c'est ce
+        // qui garantit qu'on ne reposera pas la question au prochain
+        // lancement.
+        assert(call(pont, "account.state", {{"path", manuscrit.string()}})
+                   ["result"]["pairing"]["state"] == "jamais");
+
+        // 6. Déconnexion : le transport est LIBÉRÉ, pas seulement oublié.
+        auto sortie = call(pont, "account.signOut", {});
+        assert(sortie["result"]["connected"] == false);
+        assert(sortie["result"]["transportReleased"] == true);
+        assert(!connexion.hasTransport());
+        assert(transportsCrees == 1); // aucune reconnexion silencieuse
+
+        // 7. Et l'édition continue exactement comme avant.
+        assert(call(pont, "editor.insertText",
+                    {{"block", 0}, {"pos", 0}, {"text", "Oui. "}})["ok"] == true);
+        assert(transportsCrees == 1);
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 26 OK (aucun reseau tant qu'on ne se connecte pas)\n";
     }
 
     std::cout << "Tous les tests du pont sont passes.\n";

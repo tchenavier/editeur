@@ -21,7 +21,7 @@
 // créer de compte pour en profiter.
 //
 // L'identifiant de projet, lui, est attribué à la première sauvegarde
-// par FileApi (voir FileApi.h) : c'est là que le fichier est écrit, donc
+// par ManuscriptApi (voir ManuscriptApi.h) : c'est là que le fichier est écrit, donc
 // là que l'identité doit être scellée.
 // -----------------------------------------------------------------------
 

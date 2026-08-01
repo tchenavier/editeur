@@ -1,7 +1,7 @@
-// FileApi.cpp
-// Implémentation des commandes file.*. Voir FileApi.h.
+// ManuscriptApi.cpp
+// Implémentation des commandes file.*. Voir ManuscriptApi.h.
 
-#include "FileApi.h"
+#include "ManuscriptApi.h"
 
 #include "MarkdownIO.h"
 #include "NativeDialog.h"
@@ -34,10 +34,10 @@ void ensureProjectId(core::Document& document) {
 
 } // namespace
 
-FileApi::FileApi(core::Document& document, core::UndoManager& undo)
+ManuscriptApi::ManuscriptApi(core::Document& document, core::UndoManager& undo)
     : m_document(document), m_undo(undo) {}
 
-bool FileApi::registerOn(Bridge& bridge) {
+bool ManuscriptApi::registerOn(Bridge& bridge) {
     bool ok = true;
     ok &= bridge.registerCommand("file.save",
         [this](const json& p) { return save(p); });
@@ -62,7 +62,7 @@ bool FileApi::registerOn(Bridge& bridge) {
     return ok;
 }
 
-json FileApi::save(const json& payload) {
+json ManuscriptApi::save(const json& payload) {
     const std::string path = requireString(payload, "path");
     const bool force = optBool(payload, "force");
     const auto fsPath = utils::pathFromUtf8(path);
@@ -89,7 +89,7 @@ json FileApi::save(const json& payload) {
     return {{"saved", true}};
 }
 
-json FileApi::load(const json& payload) {
+json ManuscriptApi::load(const json& payload) {
     const std::string path = requireString(payload, "path");
     std::string error;
     const auto fsPath = utils::pathFromUtf8(path);
@@ -103,11 +103,11 @@ json FileApi::load(const json& payload) {
     return {{"loaded", true}};
 }
 
-json FileApi::serializeCmd(const json&) {
+json ManuscriptApi::serializeCmd(const json&) {
     return {{"markdown", io::serialize(m_document)}};
 }
 
-json FileApi::getMetadata(const json&) {
+json ManuscriptApi::getMetadata(const json&) {
     const auto& meta = m_document.metadata();
     // 'project' est en LECTURE SEULE : il est renvoyé pour information,
     // mais setMetadata ne l'accepte pas. L'identité d'un projet est
@@ -120,7 +120,7 @@ json FileApi::getMetadata(const json&) {
             {"project", meta.projectId}};
 }
 
-json FileApi::setMetadata(const json& payload) {
+json ManuscriptApi::setMetadata(const json& payload) {
     auto& meta = m_document.metadata();
     // Seuls les champs présents sont modifiés : le JS peut n'envoyer que
     // ce que l'utilisateur a changé dans le panneau de métadonnées.
@@ -152,7 +152,7 @@ FileKind fileKindFromName(const std::string& name) {
 
 } // namespace
 
-json FileApi::chooseOpen(const json& payload) {
+json ManuscriptApi::chooseOpen(const json& payload) {
     // 'kind' et 'title' sont facultatifs : sans eux, on ouvre un manuscrit
     // (comportement d'origine). Avec, la même commande sert à choisir une
     // image de couverture (Phase 4).
@@ -163,7 +163,7 @@ json FileApi::chooseOpen(const json& payload) {
     return {{"cancelled", false}, {"path", r.path}};
 }
 
-json FileApi::chooseSave(const json& payload) {
+json ManuscriptApi::chooseSave(const json& payload) {
     const auto r = saveFileDialog(m_ownerWindow,
                                   optString(payload, "title", "Enregistrer le manuscrit"),
                                   optString(payload, "name", "mon-roman.md"),
@@ -172,13 +172,13 @@ json FileApi::chooseSave(const json& payload) {
     return {{"cancelled", false}, {"path", r.path}};
 }
 
-json FileApi::chooseFolder(const json&) {
+json ManuscriptApi::chooseFolder(const json&) {
     const auto r = chooseFolderDialog(m_ownerWindow, "Choisir le dossier des fiches");
     if (!r.ok) return {{"cancelled", true}};
     return {{"cancelled", false}, {"path", r.path}};
 }
 
-json FileApi::setState(const json& payload) {
+json ManuscriptApi::setState(const json& payload) {
     if (payload.contains("dirty") && payload["dirty"].is_boolean()) {
         m_dirty = payload["dirty"].get<bool>();
     }
@@ -188,7 +188,7 @@ json FileApi::setState(const json& payload) {
     return {{"dirty", m_dirty}, {"path", m_currentPath}};
 }
 
-bool FileApi::saveCurrent(std::string* errorMessage, bool force, bool* conflict) {
+bool ManuscriptApi::saveCurrent(std::string* errorMessage, bool force, bool* conflict) {
     if (conflict) *conflict = false;
     std::string path = m_currentPath;
     if (path.empty()) {
@@ -221,7 +221,7 @@ bool FileApi::saveCurrent(std::string* errorMessage, bool force, bool* conflict)
     return true;
 }
 
-json FileApi::backup(const json& payload) {
+json ManuscriptApi::backup(const json& payload) {
     const std::string path = requireString(payload, "path");
     // Nombre de sauvegardes à conserver (défaut : 10).
     size_t keep = 10;

@@ -58,17 +58,42 @@ démarre quand même mais affiche une page de démonstration minimale au lieu
 de l'éditeur. À terme, l'interface sera embarquée dans le binaire (prévu au
 cadrage) et ce problème disparaîtra.
 
-### 2. Bug d'en-têtes du SDK Windows 10.0.26100
+### 2. `<windows.h>` qui ne compile pas : ce n'était pas le SDK
 
-Ce SDK souffre d'une inclusion circulaire entre `winbase.h` et `fileapi.h` :
-des types (`STREAM_INFO_LEVELS`, `CREATEFILE2_EXTENDED_PARAMETERS`) sont
-utilisés avant d'être définis, et `<windows.h>` refuse de compiler.
+Pendant longtemps ce projet a cru à un bug du SDK Windows 10.0.26100 :
+`<windows.h>` refusait de compiler, `winbase.h` utilisant des types
+(`STREAM_INFO_LEVELS`, `CREATEFILE2_EXTENDED_PARAMETERS`) avant qu'ils soient
+définis. Le contournement était de cibler `_WIN32_WINNT 0x0501` avant tout
+`#include`, ce qui désactivait les blocs concernés.
 
-Contournement appliqué dans `main_webview.cpp` et `NativeDialog.cpp` :
-cibler `_WIN32_WINNT 0x0501` **avant tout `#include`**, ce qui désactive les
-blocs fautifs. Ces macros ne font que filtrer les déclarations visibles :
-ni webview ni notre code n'utilisent d'API plus récente, donc rien n'est
-perdu. Si le SDK est corrigé un jour, ces définitions pourront sauter.
+**Le vrai coupable était nous.** `Bridge/FileApi.h` masquait le `fileapi.h`
+du SDK : les chemins `/I` sont fouillés **avant** les chemins système, et les
+noms de fichiers sont insensibles à la casse sous Windows. Tout
+`#include <fileapi.h>` fait depuis `winbase.h` atterrissait donc dans notre
+en-tête, qui ne définit évidemment aucun de ces types.
+
+Vérification en trois lignes, le jour où le doute revient :
+
+```bat
+echo #include ^<windows.h^> > essai.cpp && echo int main(){return 0;} >> essai.cpp
+cl /nologo /c essai.cpp              REM compile
+cl /nologo /c /IBridge essai.cpp     REM echoue si un en-tete masque le SDK
+```
+
+Le module a donc été renommé **`ManuscriptApi`** (fichiers
+`Bridge/ManuscriptApi.{h,cpp}`, classe `bridge::ManuscriptApi`), et
+`<windows.h>` compile désormais sans aucune macro de cible.
+
+**Règle qui en découle** : un en-tête de ce projet ne doit jamais porter le
+nom d'un en-tête système, même avec une casse différente. Les noms à éviter
+sont ceux du SDK Windows (`fileapi.h`, `winbase.h`, `search.h`, `io.h`,
+`memory.h`, `time.h`…) et ceux de la bibliothèque standard. `net/Transport.h`
+est à surveiller si un en-tête système du même nom apparaissait un jour.
+
+Les définitions `_WIN32_WINNT 0x0501` de `main_webview.cpp` et
+`NativeDialog.cpp` sont restées : elles ne gênent rien et ces deux fichiers
+n'utilisent aucune API plus récente. Elles ne sont simplement plus
+nécessaires.
 
 ### 3. Export PDF : impression asynchrone
 
@@ -297,9 +322,27 @@ copie.**
 | `test_project` | Inventaire du projet et journal des modifications |
 | `test_diff` | Alignement de deux versions, découpage en phrases |
 | `test_reflow` | Redécoupage d'un texte aplati d'après une version de référence |
-| `test_bridge` | Le pont de bout en bout : toutes les commandes |
+| `test_sync` | Moteur de synchronisation : plan à trois inventaires, conflits, reprise |
+| `test_net` | Client de protocole contre un transport simulé, réponses hostiles |
+| `test_http` | Transport réel, contre un serveur jouet lancé par le test |
+| `test_bridge` | Le pont de bout en bout : toutes les commandes, dont « tout marche hors ligne » et « aucun réseau tant qu'on ne se connecte pas » |
 
-16 suites, 152 cas, sans framework externe.
+19 suites, 181 cas, sans framework externe.
+
+Deux tests du pont ne vérifient pas une fonctionnalité mais une **promesse
+tenue**, et méritent d'être conservés tels quels :
+
+- *Test 25* exécute un parcours d'écriture complet sans réseau ni compte. Si
+  un appel réseau se glisse dans une commande d'édition, il tombe.
+- *Test 26* compte les transports réellement fabriqués pendant qu'on écrit,
+  enregistre et consulte l'état du compte : **zéro**, jusqu'à la connexion
+  explicite. Si quelqu'un ajoute une initialisation réseau au démarrage, il
+  tombe aussi.
+
+`test_http` est la seule suite qui ouvre de vraies connexions : elle lance son
+propre serveur sur `127.0.0.1`, sur un port attribué par le système. Rien ne
+sort de la machine, aucun port n'est réservé, et deux exécutions simultanées
+ne se gênent pas.
 
 ---
 

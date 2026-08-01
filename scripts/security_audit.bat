@@ -27,7 +27,7 @@ if %errorlevel% neq 0 exit /b 1
 cd /d "%~dp0.."
 set OUT=%~dp0..\build\security
 if not exist "%OUT%" mkdir "%OUT%"
-set INC=/Icore /Iio /Iutils /IBridge
+set INC=/Icore /Iio /Iutils /Inet /IBridge
 
 REM Sources : decouvertes automatiquement et partagees avec les autres
 REM scripts (voir sources.bat). Rien a mettre a jour ici quand un module

@@ -11,8 +11,8 @@ REM
 REM  Ici, les sources sont DECOUVERTES, pas enumerees : ajouter un module
 REM  ne demande plus de toucher a aucun script.
 REM
-REM  REGLE : tout *.cpp de core\, io\, utils\ et Bridge\ EST une source,
-REM  sauf :
+REM  REGLE : tout *.cpp de core\, io\, utils\, net\ et Bridge\ EST une
+REM  source, sauf :
 REM    - test_*.cpp        : chaque suite de tests a sa propre liste
 REM                          (voir build_tests.bat, et la remarque plus bas)
 REM    - fuzz_parsers.cpp  : programme d'audit, compile a part
@@ -22,7 +22,7 @@ REM                          piece qui connaisse webview ; les tests et
 REM                          l'audit compilent tout le reste sans lui.
 REM
 REM  Variables produites (chemins RELATIFS a la racine du projet) :
-REM    SRC_CORE, SRC_UTILS, SRC_IO, SRC_BRIDGE, et SRC_ALL (les quatre).
+REM    SRC_CORE, SRC_UTILS, SRC_IO, SRC_NET, SRC_BRIDGE, et SRC_ALL.
 REM
 REM  USAGE :   call "%~dp0sources.bat"
 REM            cl ... %SRC_ALL% mon_programme.cpp
@@ -40,20 +40,23 @@ if "%ROOT%"=="" set ROOT=%~dp0..
 set SRC_CORE=
 set SRC_UTILS=
 set SRC_IO=
+set SRC_NET=
 set SRC_BRIDGE=
 
 call :collecter SRC_CORE   core
 call :collecter SRC_UTILS  utils
 call :collecter SRC_IO     io
+call :collecter SRC_NET    net
 call :collecter SRC_BRIDGE Bridge
 
-set SRC_ALL=%SRC_CORE% %SRC_UTILS% %SRC_IO% %SRC_BRIDGE%
+set SRC_ALL=%SRC_CORE% %SRC_UTILS% %SRC_IO% %SRC_NET% %SRC_BRIDGE%
 
 REM Garde-fou : si la decouverte ne rend rien, tous les scripts
 REM echoueraient plus loin avec des erreurs incomprehensibles.
-if "%SRC_ALL%"=="   " goto :vide
+if "%SRC_ALL%"=="    " goto :vide
 if "%SRC_CORE%"==""  goto :vide
 if "%SRC_IO%"==""    goto :vide
+if "%SRC_NET%"==""   goto :vide
 exit /b 0
 
 REM ----------------------------------------------------------------------
@@ -70,5 +73,5 @@ exit /b 0
 
 :vide
 echo *** sources.bat : aucune source trouvee dans %ROOT% ***
-echo Verifiez que le projet est complet ^(dossiers core, io, utils, Bridge^).
+echo Verifiez que le projet est complet ^(dossiers core, io, utils, net, Bridge^).
 exit /b 1

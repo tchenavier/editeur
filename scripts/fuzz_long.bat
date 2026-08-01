@@ -37,7 +37,7 @@ if %errorlevel% neq 0 exit /b 1
 cd /d "%~dp0.."
 set OUT=%~dp0..\build\security
 if not exist "%OUT%" mkdir "%OUT%"
-set INC=/Icore /Iio /Iutils /IBridge
+set INC=/Icore /Iio /Iutils /Inet /IBridge
 
 REM Sources partagees avec les autres scripts (voir sources.bat).
 call "%~dp0sources.bat"

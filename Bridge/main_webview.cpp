@@ -34,11 +34,12 @@
 
 #include "webview.h"   // header unique de webview/webview
 
+#include "AccountApi.h"
 #include "Bridge.h"
 #include "EditorApi.h"
 #include "CardApi.h"
 #include "ExportApi.h"
-#include "FileApi.h"
+#include "ManuscriptApi.h"
 #include "CompareApi.h"
 #include "ProjectApi.h"
 #include "SpellApi.h"
@@ -60,7 +61,7 @@ namespace {
 // intercepte donc WM_CLOSE en sous-classant la fenêtre native. L'UI tient
 // le C++ informé de l'état du document via la commande file.setState.
 WNDPROC g_originalWndProc = nullptr;
-bridge::FileApi* g_fileApi = nullptr;
+bridge::ManuscriptApi* g_fileApi = nullptr;
 
 LRESULT CALLBACK closeGuardProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_CLOSE && g_fileApi && g_fileApi->hasUnsavedChanges()) {
@@ -455,7 +456,7 @@ int main() {
 
     bridge::Bridge dispatcher;
     bridge::EditorApi editorApi(document, undoManager);
-    bridge::FileApi fileApi(document, undoManager);
+    bridge::ManuscriptApi fileApi(document, undoManager);
     bridge::CardApi cardApi(cardLibrary, cardSchemas);
     bridge::ExportApi exportApi(document, cardLibrary, cardSchemas);
     // Suivi du projet (Phase 5, jalon A) : inventaire et journal des
@@ -468,10 +469,17 @@ int main() {
     // Comparaison de versions : relire une correction, ou voir ce qui
     // diffère avant d'écraser un fichier modifié en dehors de l'éditeur.
     bridge::CompareApi compareApi(document, undoManager);
+    // Comptes et appairage (Phase 5, jalon C). CETTE LIGNE N'OUVRE RIEN :
+    // aucune session réseau, aucune poignée système, aucun fil. La
+    // connexion reste un objet vide tant que l'auteur ne demande pas
+    // explicitement à se connecter — un éditeur de roman doit démarrer
+    // aussi vite hors ligne qu'en ligne. Voir net/Connection.h.
+    net::Connection connection;
+    bridge::AccountApi accountApi(connection, document);
     if (!editorApi.registerOn(dispatcher) || !fileApi.registerOn(dispatcher) ||
         !cardApi.registerOn(dispatcher) || !exportApi.registerOn(dispatcher) ||
         !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher) ||
-        !compareApi.registerOn(dispatcher)) {
+        !compareApi.registerOn(dispatcher) || !accountApi.registerOn(dispatcher)) {
         return 1; // conflit de noms de commandes : bug de câblage, on refuse de démarrer
     }
 
@@ -498,7 +506,7 @@ int main() {
     const auto windowHandle = window.window();
     void* nativeHandle = windowHandle.ok() ? windowHandle.value() : nullptr;
 
-    // Permet à FileApi de rendre les dialogues « Ouvrir »/« Enregistrer »
+    // Permet à ManuscriptApi de rendre les dialogues « Ouvrir »/« Enregistrer »
     // modaux par rapport à la fenêtre principale.
     fileApi.setOwnerWindow(nativeHandle);
 

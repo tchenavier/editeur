@@ -103,6 +103,13 @@ if (typeof window.cppInvoke !== "function") {
     function sameSet(a, b) { if (a.size !== b.size) return false; for (const x of a) if (!b.has(x)) return false; return true; }
     function allBlocks() { return blocks.map(serialize); }
 
+    // État de compte simulé, en mémoire seulement (Phase 5, jalon C).
+    const mockAccount = {
+      connected: false, server: "", user: "",
+      pairing: { state: "sans-fichier", mode: "lecture-seule", autoSync: false,
+                 server: "", canPropose: false },
+    };
+
     function wordCount() {
       let n = 0;
       blocks.forEach((b) => { let inW = false; b.cells.forEach((x) => { if (isSep(x.c)) inW = false; else if (!inW) { inW = true; n++; } }); });
@@ -518,6 +525,55 @@ if (typeof window.cppInvoke !== "function") {
       "compare.reparagraph": () => {
         throw new Error("Redécoupage indisponible dans l'aperçu (moteur simulé) : "
                         + "lancez l'application.");
+      },
+
+      // --- Compte et appairage (Phase 5, jalon C) ---------------------
+      // L'aperçu simule un appairage EN MÉMOIRE : de quoi régler l'écran
+      // sans serveur. Aucune requête n'est émise, ce qui est d'ailleurs
+      // exactement ce que fait l'application tant qu'on ne se connecte pas.
+      "account.state": () => ({
+        connected: mockAccount.connected,
+        server: mockAccount.server,
+        user: mockAccount.user,
+        projectId: "aperçu",
+        pairing: mockAccount.pairing,
+      }),
+      "account.signIn": (p) => {
+        if (!p.server || !p.user) {
+          return { connected: false, reason: "refuse",
+                   message: "Serveur et identifiant sont nécessaires." };
+        }
+        mockAccount.connected = true;
+        mockAccount.server = p.server;
+        mockAccount.user = p.user;
+        return { connected: true, server: p.server, user: p.user,
+                 pairing: mockAccount.pairing };
+      },
+      "account.signOut": () => {
+        mockAccount.connected = false;
+        mockAccount.server = "";
+        mockAccount.user = "";
+        return { connected: false, transportReleased: true };
+      },
+      "account.pair": (p) => {
+        mockAccount.pairing = { state: "appaire", mode: p.mode || "lecture-seule",
+                                autoSync: false, server: mockAccount.server,
+                                canPropose: false };
+        return { pairing: mockAccount.pairing };
+      },
+      "account.unpair": () => {
+        mockAccount.pairing = { state: "aucun", mode: "lecture-seule",
+                                autoSync: false, server: "", canPropose: true };
+        return { pairing: mockAccount.pairing };
+      },
+      "account.never": () => {
+        mockAccount.pairing = { state: "jamais", mode: "lecture-seule",
+                                autoSync: false, server: "", canPropose: false };
+        return { pairing: mockAccount.pairing };
+      },
+      "account.setAutoSync": (p) => {
+        mockAccount.pairing.autoSync = !!p.enabled;
+        return { pairing: mockAccount.pairing };
       },
     };
 
@@ -2144,6 +2200,10 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   setSettingsMsg("");
   renderShortcutList();
   renderAlertsPanel();
+  // L'état du compte et de l'appairage se relit à l'ouverture : c'est une
+  // lecture locale, elle ne coûte rien et évite d'afficher une
+  // information périmée.
+  refreshAccount();
   settingsDialog.showModal();
 });
 document.getElementById("settingsClose").addEventListener("click", () => { recordingAction = null; settingsDialog.close(); });
@@ -2986,6 +3046,177 @@ document.querySelectorAll(".tabs .tab").forEach((tab) => {
 });
 // État initial : l'onglet Apparence est actif au premier affichage.
 document.getElementById("shortcutsReset").hidden = true;
+
+// =====================================================================
+// 14sexies. Compte et appairage (Phase 5, jalon C)
+//
+//   RIEN ICI NE PART SUR LE RÉSEAU tant que l'auteur ne clique pas sur
+//   « Se connecter ». account.state, qui décrit l'état, est une commande
+//   purement locale : elle lit un fichier à côté du manuscrit et rien
+//   d'autre. Côté C++, aucune session réseau n'est même construite avant
+//   la connexion (voir net/Connection.h).
+//
+//   Le mot de passe est effacé du champ dès l'envoi : il n'a aucune
+//   raison de rester dans le document après avoir servi.
+// =====================================================================
+const account = {
+  connected: false,
+  pairing: { state: "sans-fichier", canPropose: false, autoSync: false },
+};
+
+// Réglage global : proposer l'appairage à la connexion. Activé par
+// défaut, désactivable — au même titre que la synchronisation
+// automatique, qui elle est désactivée par défaut (côté projet).
+function proposePairingEnabled() {
+  try { return localStorage.getItem("editeur.proposerAppairage") !== "non"; }
+  catch (_) { return true; }
+}
+function setProposePairing(enabled) {
+  try { localStorage.setItem("editeur.proposerAppairage", enabled ? "oui" : "non"); }
+  catch (_) {}
+}
+
+function renderAccount() {
+  document.getElementById("accountOut").hidden = account.connected;
+  document.getElementById("accountIn").hidden = !account.connected;
+  if (account.connected) {
+    document.getElementById("accountWho").textContent =
+      "Connecté en tant que « " + (account.user || "") + " » sur " + (account.server || "") + ".";
+  }
+
+  const p = account.pairing || {};
+  const libelle = {
+    "sans-fichier": "Enregistrez d'abord le manuscrit : l'appairage se range à côté du fichier.",
+    "aucun": "Ce projet n'est pas appairé. Rien n'en part.",
+    "appaire": "Ce projet est appairé à " + (p.server || "") + " ("
+      + (p.mode === "deux-sens" ? "deux sens" : "lecture seule") + ").",
+    "jamais": "Vous avez demandé à ne plus être sollicité pour ce projet.",
+  }[p.state] || "—";
+  document.getElementById("accountPairing").textContent = libelle;
+
+  // On ne propose d'appairer que si c'est possible : connecté, manuscrit
+  // enregistré, et décision pas encore prise.
+  document.getElementById("accountPairRow").hidden =
+    !(account.connected && p.canPropose);
+  document.getElementById("accountUnpairRow").hidden = (p.state !== "appaire");
+  document.getElementById("accountAutoSync").checked = !!p.autoSync;
+  document.getElementById("accountPropose").checked = proposePairingEnabled();
+}
+
+async function refreshAccount() {
+  try {
+    const r = await invoke("account.state", { path: state.filePath || "" });
+    account.connected = r.connected;
+    account.server = r.server;
+    account.user = r.user;
+    account.pairing = r.pairing;
+    renderAccount();
+  } catch (err) { reportError(err); }
+}
+
+// La proposition d'appairage, après une connexion réussie. Trois
+// réponses, et « jamais » est retenu pour de bon : une question reposée
+// en boucle finit par être acceptée par lassitude, ce qui ne serait pas
+// un consentement.
+async function proposePairing() {
+  // Sans fichier sur le disque, il n'y a nulle part où ranger la
+  // décision : on ne pose pas une question dont la réponse serait perdue.
+  if (!state.filePath) return;
+  const nom = state.filePath.replace(/^.*[\\/]/, "");
+  const reponse = await askConfirm(
+    "Synchroniser « " + nom + " » avec " + (account.server || "le serveur") + " ? "
+    + "Le fichier sur votre disque reste la référence ; le serveur n'en sera "
+    + "qu'un miroir, en lecture seule pour l'instant.",
+    "Appairer", "Synchroniser ce projet ?", "Jamais pour ce projet");
+  try {
+    if (reponse === true) {
+      const r = await invoke("account.pair",
+                             { path: state.filePath, mode: "lecture-seule" });
+      account.pairing = r.pairing;
+      setStatus("Projet appairé.");
+    } else if (reponse === "third") {
+      const r = await invoke("account.never", { path: state.filePath });
+      account.pairing = r.pairing;
+      setStatus("Ce projet ne vous sera plus proposé.");
+    } else {
+      setStatus("Appairage remis à plus tard.");
+    }
+    renderAccount();
+  } catch (err) { reportError(err); }
+}
+
+document.getElementById("accountSignIn").addEventListener("click", async () => {
+  const champSecret = document.getElementById("accountSecret");
+  const secret = champSecret.value;
+  const server = document.getElementById("accountServer").value.trim();
+  const user = document.getElementById("accountUser").value.trim();
+  // Effacé AVANT même de savoir si la connexion réussit : le champ n'a
+  // plus rien à en faire.
+  champSecret.value = "";
+
+  if (!server || !user || !secret) {
+    setSettingsMsg("Serveur, identifiant et mot de passe sont nécessaires.", true);
+    return;
+  }
+  try {
+    setSettingsMsg("Connexion…");
+    const r = await invoke("account.signIn",
+                           { server: server, user: user, secret: secret,
+                             path: state.filePath || "" });
+    if (!r.connected) {
+      setSettingsMsg(r.message || "Connexion refusée.", true);
+      return;
+    }
+    account.connected = true;
+    account.server = r.server;
+    account.user = r.user;
+    account.pairing = r.pairing;
+    renderAccount();
+    setSettingsMsg("Connecté.");
+    if (proposePairingEnabled() && account.pairing && account.pairing.canPropose) {
+      await proposePairing();
+    }
+  } catch (err) {
+    setSettingsMsg(String(err && err.message ? err.message : err), true);
+  }
+});
+
+document.getElementById("accountSignOut").addEventListener("click", async () => {
+  try {
+    await invoke("account.signOut", {});
+    account.connected = false;
+    account.user = "";
+    account.server = "";
+    renderAccount();
+    setSettingsMsg("Déconnecté.");
+  } catch (err) { setSettingsMsg(String(err), true); }
+});
+
+async function pairingAction(commande, message, charge) {
+  try {
+    const r = await invoke(commande, Object.assign({ path: state.filePath || "" }, charge || {}));
+    account.pairing = r.pairing;
+    renderAccount();
+    setSettingsMsg(message);
+  } catch (err) { setSettingsMsg(String(err && err.message ? err.message : err), true); }
+}
+
+document.getElementById("accountPair").addEventListener("click",
+  () => pairingAction("account.pair", "Projet appairé.", { mode: "lecture-seule" }));
+document.getElementById("accountNever").addEventListener("click",
+  () => pairingAction("account.never", "Ce projet ne vous sera plus proposé."));
+document.getElementById("accountUnpair").addEventListener("click",
+  () => pairingAction("account.unpair", "Projet désappairé."));
+document.getElementById("accountAutoSync").addEventListener("change", (e) =>
+  pairingAction("account.setAutoSync",
+                e.target.checked ? "Synchronisation automatique activée."
+                                 : "Synchronisation automatique désactivée.",
+                { enabled: e.target.checked }));
+document.getElementById("accountPropose").addEventListener("change", (e) => {
+  setProposePairing(e.target.checked);
+  setSettingsMsg(e.target.checked ? "L'appairage vous sera proposé à la connexion."
+                                  : "L'appairage ne vous sera plus proposé.");
+});
 
 // =====================================================================
 // 14septies. Fiches de worldbuilding (Phase 2)

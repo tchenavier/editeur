@@ -254,6 +254,7 @@
     <button class="tab" data-tab="shortcuts">Raccourcis</button>
     <button class="tab" data-tab="alerts">Alertes et rappels</button>
     <button class="tab" data-tab="spell">Correction</button>
+    <button class="tab" data-tab="account">Compte</button>
   </div>
 
   <div id="tab-appearance" class="tab-panel">
@@ -307,6 +308,60 @@
     <p class="hint">Les noms inventés de votre roman. Ce fichier accompagne
       le manuscrit : il le suit s'il change de dossier.</p>
     <div id="personalList"></div>
+  </div>
+
+  <!-- Compte et synchronisation (Phase 5, jalon C).
+       Cet onglet est le SEUL endroit d'où part une requête réseau. Tant
+       qu'on ne s'y connecte pas, l'application n'ouvre aucune connexion :
+       ce n'est pas seulement qu'elle n'envoie rien, c'est qu'il n'existe
+       rien à envoyer avec. -->
+  <div id="tab-account" class="tab-panel" hidden>
+    <p class="hint">L'éditeur fonctionne entièrement sans compte : tout est
+      là, hors ligne, et le fichier sur votre disque reste la référence. Un
+      compte ne sert qu'à retrouver un projet sur une autre machine.</p>
+
+    <div id="accountOut">
+      <div class="field-row">
+        <label for="accountServer">Serveur</label>
+        <input id="accountServer" type="text" placeholder="https://mon-serveur.fr" autocomplete="off">
+      </div>
+      <div class="field-row">
+        <label for="accountUser">Identifiant</label>
+        <input id="accountUser" type="text" autocomplete="off">
+      </div>
+      <div class="field-row">
+        <label for="accountSecret">Mot de passe</label>
+        <input id="accountSecret" type="password" autocomplete="off">
+      </div>
+      <div class="field-row">
+        <button id="accountSignIn" class="primary">Se connecter</button>
+      </div>
+    </div>
+
+    <div id="accountIn" hidden>
+      <div id="accountWho"></div>
+      <div class="field-row">
+        <button id="accountSignOut">Se déconnecter</button>
+      </div>
+    </div>
+
+    <div class="panel-head" style="margin-top:.9rem">Ce manuscrit</div>
+    <div id="accountPairing">—</div>
+    <div class="field-row" id="accountPairRow" hidden>
+      <button id="accountPair">Appairer ce projet</button>
+      <button id="accountNever">Ne plus me le proposer</button>
+    </div>
+    <div class="field-row" id="accountUnpairRow" hidden>
+      <label class="check"><input type="checkbox" id="accountAutoSync">
+        Synchroniser automatiquement ce projet</label>
+      <button id="accountUnpair">Désappairer</button>
+    </div>
+
+    <div class="panel-head" style="margin-top:.9rem">Proposition</div>
+    <div class="field-row">
+      <label class="check"><input type="checkbox" id="accountPropose" checked>
+        Proposer d'appairer le projet ouvert quand je me connecte</label>
+    </div>
   </div>
 
   <div id="settingsMsg" class="settings-msg"></div>

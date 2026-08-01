@@ -95,9 +95,10 @@ notre audit, valent mieux qu'une dépendance à suivre pendant des années.
 
 | Couche | Rôle |
 |---|---|
-| `core/` | Logique métier : modèle de texte, historique, recherche, fiches, correcteur. Aucune dépendance graphique. |
-| `io/` | Sérialisation : Markdown, YAML, fiches, XHTML, archives, EPUB, dictionnaires. |
+| `core/` | Logique métier : modèle de texte, historique, recherche, fiches, correcteur, comparaison. Aucune dépendance graphique. |
+| `io/` | Sérialisation : Markdown, YAML, fiches, XHTML, archives, EPUB, dictionnaires, inventaire et plan de synchronisation. |
 | `utils/` | Transverse : UTF-8, chemins, empreintes. |
+| `net/` | Réseau : le contrat HTTP, le transport isolé derrière une interface, le client de protocole. Rien au-dessus ne connaît WinHTTP. |
 | `Bridge/` | Le pont C++ ↔ JS. Ne connaît pas webview, donc testable sans interface. |
 | `ui/` | Interface auto-contenue, sans dépendance externe. N'est qu'une vue. |
 
@@ -108,13 +109,13 @@ que `core/` tient sans `io/`, et `io/` sans le pont.
 
 ## Qualité
 
-**16 suites, 152 cas de tests** sans framework externe, et un audit de sécurité
+**19 suites, 181 cas de tests** sans framework externe, et un audit de sécurité
 reproductible en six étapes : compilation stricte (avertissements traités comme
 des erreurs), détecteur d'erreurs mémoire, fuzzing, fuites mémoire sur toutes
 les couches, analyse statique. Tout au vert.
 
 ```bat
-scripts\build_tests.bat        REM les 16 suites
+scripts\build_tests.bat        REM les 19 suites
 scripts\security_audit.bat     REM les 6 vérifications
 scripts\fuzz_long.bat          REM campagne de fuzzing longue
 ```
@@ -134,13 +135,32 @@ l'auteur ne peut jamais y être interprété comme du code.
 | 2 | Fiches de worldbuilding, modèle extensible | **Réalisée** |
 | 3 | Lien texte ↔ fiches, détection d'incohérences | **Réalisée** |
 | 4 | Export PDF / EPUB, bible narrative | **Réalisée** |
-| 5 | Comptes, cloud, synchronisation | Amorcée |
+| 5 | Comptes, cloud, synchronisation | Amorcée — jalons A, B et C |
 | 6 | Site web : publication, forum, messagerie | À venir |
 
 La Phase 5 suit un principe non négociable : **la connexion ne sera jamais
 obligatoire.** L'application reste complète sans compte et sans réseau ; les
 fichiers locaux restent la référence, le cloud n'en sera qu'un miroir, et rien
-ne partira sans accord explicite, projet par projet.
+ne partira sans accord explicite, projet par projet. Ce n'est pas une
+intention mais **un test** : une suite vérifie que tout un parcours d'écriture
+— frappe, styles, enregistrement, fiches, cohérence, export — réussit sans
+réseau ni compte. Si un appel réseau se glissait un jour dans une commande
+d'édition, elle tomberait.
+
+**Rien de réseau n'existe tant qu'on ne se connecte pas.** Pas seulement « rien
+n'est envoyé » : aucune session, aucune poignée système, aucun fil d'exécution
+n'est créé avant que l'auteur ne le demande, et tout est libéré à la
+déconnexion. Un test monte l'application entière et compte les transports
+créés : zéro. Écrire hors ligne ne coûte donc rien — ni en mémoire, ni au
+démarrage.
+
+Être connecté ne suffit pas non plus : chaque projet est **appairé
+séparément**, avec trois réponses possibles — appairer, plus tard, ou jamais
+pour celui-ci. Le refus est retenu et voyage avec le projet.
+
+Les jalons A (identité de projet, inventaire, journal), B (contrat HTTP
+documenté, transport isolé, client réel, moteur de synchronisation) et C
+(comptes et appairage) sont faits. Reste le serveur.
 
 ---
 

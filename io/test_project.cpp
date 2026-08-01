@@ -10,6 +10,7 @@
 //     reste.
 
 #include "ChangeLog.h"
+#include "Pairing.h"
 #include "ProjectIndex.h"
 #include "Sha256.h"
 
@@ -324,6 +325,69 @@ int main() {
         assert(io::diffIndex(relu, encore).empty());
         assert(io::readJournal(journal).size() == 2);
         std::cout << "Test 8 OK (cycle complet inventaire + journal)\n";
+    }
+
+    // --- Test 9 : appairage du projet (jalon C) ---
+    {
+        const fs::path manuscrit = racine / "appairage" / "roman.md";
+        fs::create_directories(manuscrit.parent_path(), ec);
+        {
+            std::ofstream out(manuscrit, std::ios::binary);
+            out << "---\ntitle: \"Roman\"\n---\n\nTexte.\n";
+        }
+
+        // Jamais répondu : la question peut être posée.
+        io::Pairing initial = io::loadPairing(manuscrit);
+        assert(initial.state == io::PairingState::None);
+        assert(initial.canPropose());
+        assert(!initial.isPaired());
+        assert(!initial.autoSync); // la synchro automatique est désactivée par défaut
+
+        // Appairage, puis relecture depuis le disque.
+        io::Pairing appaire;
+        appaire.state = io::PairingState::Paired;
+        appaire.mode = io::PairingMode::ReadOnly;
+        appaire.server = "https://exemple.fr";
+        std::string err;
+        assert(io::savePairing(appaire, manuscrit, &err));
+
+        const io::Pairing relu = io::loadPairing(manuscrit);
+        assert(relu.isPaired());
+        assert(relu.server == "https://exemple.fr");
+        assert(relu.mode == io::PairingMode::ReadOnly);
+        assert(!relu.canPropose());
+
+        // « Jamais » se retient : c'est ce qui empêche de reposer la
+        // question à chaque lancement jusqu'à obtenir un « oui » de
+        // lassitude.
+        io::Pairing jamais;
+        jamais.state = io::PairingState::Never;
+        assert(io::savePairing(jamais, manuscrit, &err));
+        assert(io::loadPairing(manuscrit).state == io::PairingState::Never);
+        assert(!io::loadPairing(manuscrit).canPropose());
+
+        // Lecture tolérante : fichier abîmé, absent, ou incohérent.
+        assert(io::parsePairing("").state == io::PairingState::None);
+        assert(io::parsePairing("\x01\x02 n'importe quoi\n").state == io::PairingState::None);
+        // Appairé sans serveur : la promesse est intenable, on revient à
+        // « aucun » plutôt que d'annoncer une synchronisation impossible.
+        assert(io::parsePairing("etat appaire\n").state == io::PairingState::None);
+        assert(io::loadPairing(racine / "nulle_part" / "absent.md").state ==
+               io::PairingState::None);
+
+        // Aucun secret n'est écrit dans ce fichier : il doit pouvoir être
+        // lu par n'importe qui sans conséquence.
+        const std::string contenu = io::serializePairing(relu);
+        assert(contenu.find("token") == std::string::npos);
+        assert(contenu.find("secret") == std::string::npos);
+        assert(contenu.find("Bearer") == std::string::npos);
+
+        // Un manuscrit jamais enregistré ne peut pas être appairé : il n'y
+        // a nulle part où ranger la décision.
+        assert(!io::savePairing(appaire, fs::path(), &err));
+        assert(!err.empty());
+
+        std::cout << "Test 9 OK (appairage : trois etats, lecture tolerante)\n";
     }
 
     fs::remove_all(racine, ec);

@@ -91,6 +91,10 @@ fs::path journalPathFor(const fs::path& manuscriptPath) {
     return syncFolderFor(manuscriptPath) / "journal.txt";
 }
 
+fs::path basePathFor(const fs::path& manuscriptPath) {
+    return syncFolderFor(manuscriptPath) / "derniere_synchro.txt";
+}
+
 ProjectIndex buildIndex(const fs::path& manuscriptPath,
                         const std::string& projectId,
                         size_t* skipped) {

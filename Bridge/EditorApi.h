@@ -42,7 +42,7 @@
 // que l'historique est alimenté (le modèle n'en sait rien).
 //
 // Les commandes de fichier (sauvegarde/ouverture Markdown) sont dans
-// leur propre module : voir FileApi.h.
+// leur propre module : voir ManuscriptApi.h.
 // -----------------------------------------------------------------------
 
 #pragma once
@@ -108,7 +108,7 @@ private:
 };
 
 // Sérialise un bloc vers le JSON attendu par le rendu JS. Partagé avec
-// FileApi (qui renvoie le document après un chargement).
+// ManuscriptApi (qui renvoie le document après un chargement).
 json serializeBlock(const core::TextBlock& block);
 
 // Nom du type de bloc tel que le voit l'interface ("p", "h1"... "h6").
