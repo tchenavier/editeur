@@ -1,0 +1,22 @@
+{
+  "name": "editeur",
+  "version": "1.0.0",
+  "description": "Un éditeur de texte pour **auteurs de roman**, qui réunit trois choses que les traitements de texte séparent : écrire le manuscrit, tenir la bible narrative (personnages, lieux, langues, religions, créatures, magie), et lier les deux pour repérer les incohérences.",
+  "main": "serveur/serveur.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tchenavier/editeur.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tchenavier/editeur/issues"
+  },
+  "homepage": "https://github.com/tchenavier/editeur#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}

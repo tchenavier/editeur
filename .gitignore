@@ -35,3 +35,8 @@ json-develop.zip
 /serveur/config.json
 /serveur/node_modules/
 /serveur/package-lock.json
+
+
+
+/.env
+/node_modules
