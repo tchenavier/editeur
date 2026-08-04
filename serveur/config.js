@@ -34,9 +34,25 @@
 // la machine (ni d'en afficher le décompte au milieu de leur sortie).
 //
 // Facultatif : si dotenv est absent, l'environnement suffit.
+//
+// DEUX EMPLACEMENTS SONT LUS, et ce n'est pas de l'indécision. dotenv
+// cherche par défaut dans le DOSSIER COURANT : selon qu'on lance
+// « node serveur.js » depuis serveur/ ou « node serveur/serveur.js »
+// depuis la racine, ce n'est pas le même fichier. Deux configurations
+// possibles pour la même installation, c'est une source de confusion
+// garantie — et une occasion de croire qu'un réglage est pris en compte
+// alors qu'il ne l'est pas.
+//
+// On lit donc d'abord celui qui est À CÔTÉ DE CE FICHIER, emplacement qui
+// ne dépend pas de la commande tapée, puis celui du dossier courant.
+// dotenv ne remplace jamais une variable déjà définie : le premier lu
+// l'emporte, et l'environnement du système l'emporte sur les deux.
 function chargerEnv() {
   try {
-    require('dotenv').config();
+    const dotenv = require('dotenv');
+    const path = require('path');
+    dotenv.config({ path: path.join(__dirname, '.env') });
+    dotenv.config();
   } catch (_) {
     // Rien à signaler : c'est un cas de fonctionnement normal.
   }

@@ -31,8 +31,14 @@ json-develop.zip
 /Projet_Editeur_de_texte.pdf
 
 # Serveur : la configuration contient le MOT DE PASSE DE LA BASE, elle ne
-# doit jamais être versionnée. Seul .env.exemple l'est.
-/serveur/.env
+# doit JAMAIS être versionnée. Seul .env.exemple l'est.
+#
+# Sans chemin devant, la règle vaut à TOUS les niveaux : le fichier se
+# retrouve à la racine ou dans serveur/ selon le dossier d'où l'on lance
+# les commandes, et il ne faut pas que cette différence décide si le mot
+# de passe part ou non dans le dépôt.
+.env
+.env.local
 /serveur/node_modules/
 /serveur/package.json
 /serveur/package-lock.json

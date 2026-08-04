@@ -115,11 +115,26 @@ Le compte de base n'a **que** les quatre droits nécessaires : ni `DROP`, ni
 Configuration :
 
 ```bash
-cp .env.exemple .env
-chmod 600 .env            # il contient le mot de passe de la base
+cp serveur/.env.exemple serveur/.env
+chmod 600 serveur/.env            # il contient le mot de passe de la base
 ```
 
-Puis remplissez `.env` — le fichier d'exemple explique chaque variable.
+Puis remplissez `serveur/.env` — le fichier d'exemple explique chaque variable.
+
+**Placez-le bien dans `serveur/`**, à côté de `config.js`. Cet emplacement-là
+est lu quelle que soit la commande tapée. Un `.env` posé à la racine du projet
+fonctionne aussi (dotenv regarde le dossier courant), mais alors la
+configuration dépend de l'endroit d'où vous lancez — et deux fichiers pour la
+même installation finissent toujours par diverger. Si les deux existent, celui
+de `serveur/` l'emporte.
+
+Les deux emplacements sont écartés du dépôt par `.gitignore`. Vérifiez-le une
+fois, cela ne coûte rien :
+
+```bash
+git status --short | grep -i env      # ne doit rien afficher
+git check-ignore -v .env serveur/.env # doit citer la règle qui les exclut
+```
 
 **Premier compte — sans lui, personne ne peut se connecter.** La table
 `comptes` est vide au départ, et c'est voulu : le protocole ne comporte aucun
