@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/tchenavier/editeur#readme",
   "dependencies": {
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.23.2"
   }
 }
