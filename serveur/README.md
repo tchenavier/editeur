@@ -141,6 +141,15 @@ distinguer les deux permettrait d'énumérer les comptes.
 
 **Avant tout usage réel**, et sans rien installer de plus :
 
+Depuis la racine du projet :
+
+```bash
+node serveur/test_coeur.js && node serveur/test_serveur.js
+```
+
+Ou, si vous êtes déjà dans le dossier `serveur/` (ou dans
+`/opt/editeur-sync` une fois installé) :
+
 ```bash
 node test_coeur.js      # chemins, mots de passe, jetons, permissions
 node test_serveur.js    # le serveur entier, sans base de données

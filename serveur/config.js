@@ -25,11 +25,21 @@
 
 'use strict';
 
+// dotenv est chargé DANS charger(), pas au chargement du module.
+//
+// Deux raisons. La première est de principe : exiger ce module ne devrait
+// avoir aucun effet de bord — or lire un .env en est un. La seconde est
+// concrète : les tests importent ce fichier pour vérifier le dossier des
+// projets, et n'ont aucune raison d'aller lire la configuration réelle de
+// la machine (ni d'en afficher le décompte au milieu de leur sortie).
+//
 // Facultatif : si dotenv est absent, l'environnement suffit.
-try {
-  require('dotenv').config();
-} catch (_) {
-  // Rien à signaler : c'est un cas de fonctionnement normal.
+function chargerEnv() {
+  try {
+    require('dotenv').config();
+  } catch (_) {
+    // Rien à signaler : c'est un cas de fonctionnement normal.
+  }
 }
 
 function texte(nom, defaut) {
@@ -52,6 +62,8 @@ function entier(nom, defaut) {
 }
 
 function charger() {
+  chargerEnv();
+
   const manquants = [];
   const requis = (nom) => {
     const valeur = process.env[nom];
