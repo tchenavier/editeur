@@ -82,4 +82,57 @@ function charger() {
   return config;
 }
 
-module.exports = { charger };
+// Le dossier des projets est-il utilisable ?
+//
+// POURQUOI CE CONTRÔLE EXISTE. Le serveur crée les dossiers manquants au
+// moment d'écrire un fichier. Sans cette vérification, un dossier
+// inaccessible ne se découvrait donc qu'au PREMIER DÉPÔT : le démarrage
+// se passait bien, la connexion aussi, et l'auteur recevait « panne du
+// serveur » au moment d'envoyer son manuscrit — le pire moment, et le
+// message le moins utile.
+//
+// C'est exactement le travers dénoncé plus haut pour la base de données.
+// Il n'y a pas de raison de l'appliquer à l'une et pas à l'autre.
+//
+// Retourne null si tout va bien, sinon une explication qui dit quoi faire.
+function verifierRacine(racine) {
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+
+  const qui = (() => {
+    try { return os.userInfo().username; } catch (_) { return 'ce compte'; }
+  })();
+
+  const conseil =
+    '\n\nDeux façons de régler cela :\n' +
+    '  — en production, donner le dossier au compte qui fait tourner le serveur :\n' +
+    '        sudo mkdir -p ' + racine + '\n' +
+    '        sudo chown -R ' + qui + ' ' + path.dirname(racine) + '\n' +
+    '  — en développement, pointer SYNC_RACINE vers votre dossier personnel :\n' +
+    '        SYNC_RACINE=' + path.join(os.homedir() || '/home/' + qui,
+                                       'editeur-sync', 'projets');
+
+  try {
+    fs.mkdirSync(racine, { recursive: true });
+  } catch (erreur) {
+    return 'Le dossier des projets ne peut pas être créé :\n    ' + racine +
+           '\nRaison : ' + erreur.code + ', sous l\'utilisateur « ' + qui + ' ».' +
+           conseil;
+  }
+
+  // Le droit de créer un dossier ne garantit pas celui d'y écrire : on
+  // essaie pour de bon plutôt que de le supposer.
+  const sonde = path.join(racine, '.sonde-' + process.pid);
+  try {
+    fs.writeFileSync(sonde, 'x');
+    fs.unlinkSync(sonde);
+  } catch (erreur) {
+    return 'Le dossier des projets existe mais n\'est pas accessible en écriture :\n    ' +
+           racine + '\nRaison : ' + erreur.code + ', sous l\'utilisateur « ' + qui + ' ».' +
+           conseil;
+  }
+  return null;
+}
+
+module.exports = { charger, verifierRacine };

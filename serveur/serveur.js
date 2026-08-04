@@ -297,7 +297,7 @@ module.exports = { creerServeur };
 // lui-même reste utilisable sans aucun réglage, ce qui permet aux tests
 // de le monter avec un magasin en mémoire et un dossier temporaire.
 if (require.main === module) {
-  const { charger } = require('./config');
+  const { charger, verifierRacine } = require('./config');
   const { magasinMariaDB } = require('./base');
 
   let config;
@@ -308,6 +308,15 @@ if (require.main === module) {
     // manque. Démarrer à moitié et répondre « panne » à chaque client
     // serait bien pire.
     console.error(erreur.message);
+    process.exit(1);
+  }
+
+  // Même exigence pour le dossier des projets : un dossier inaccessible
+  // se découvrait autrefois au premier dépôt de manuscrit, c'est-à-dire
+  // au plus mauvais moment possible.
+  const soucis = verifierRacine(config.racine);
+  if (soucis) {
+    console.error(soucis);
     process.exit(1);
   }
 

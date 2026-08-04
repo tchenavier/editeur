@@ -259,6 +259,29 @@ async function principal() {
     assert.strictEqual(apres.status, 401);
   });
 
+  // --- Configuration ------------------------------------------------------
+  cas('le dossier des projets est vérifié AVANT de démarrer', async () => {
+    const { verifierRacine } = require('./config');
+
+    // Un dossier utilisable ne pose aucun problème.
+    assert.strictEqual(verifierRacine(racine), null);
+
+    // Un dossier créable non plus : le serveur le crée.
+    const neuf = path.join(racine, 'sous', 'dossier');
+    assert.strictEqual(verifierRacine(neuf), null);
+    await fs.access(neuf); // il existe bien
+
+    // Un chemin impossible est refusé, et le message dit quoi faire —
+    // plutôt que de laisser l'échec surgir au premier dépôt de manuscrit,
+    // c'est-à-dire au plus mauvais moment.
+    const impossible = path.join(racine, 'fichier-pas-dossier');
+    await fs.writeFile(impossible, 'je suis un fichier');
+    const souci = verifierRacine(path.join(impossible, 'projets'));
+    assert.ok(souci, 'un chemin impossible doit être signalé');
+    assert.ok(souci.includes('SYNC_RACINE'), 'le message doit indiquer le réglage');
+    assert.ok(souci.includes('chown'), 'le message doit donner la commande de correction');
+  });
+
   // --- Exécution ----------------------------------------------------------
   for (const { titre, fn } of aFaire) {
     await fn();

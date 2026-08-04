@@ -68,11 +68,38 @@ client.
 
 ```bash
 sudo apt install nodejs mariadb-server
-sudo mkdir -p /var/lib/editeur-sync/projets
 sudo cp -r serveur /opt/editeur-sync
 cd /opt/editeur-sync
-npm install mysql2
+npm install mysql2          # + dotenv si vous voulez un fichier .env
 ```
+
+**Le dossier des projets doit appartenir au compte qui fait tourner le
+serveur.** C'est l'erreur la plus facile à commettre : `/var/lib` appartient à
+root, et le serveur lancé sous votre compte n'y écrira rien.
+
+```bash
+sudo mkdir -p /var/lib/editeur-sync/projets
+sudo chown -R "$USER" /var/lib/editeur-sync     # ou l'utilisateur du service
+```
+
+Si le serveur tournera plus tard sous un compte dédié (voir « Lancer au
+démarrage »), créez ce compte **d'abord** et donnez-lui le dossier :
+
+```bash
+sudo useradd --system --no-create-home editeur-sync
+sudo chown -R editeur-sync /var/lib/editeur-sync
+```
+
+Pour du simple développement, le plus rapide reste de pointer ailleurs :
+
+```
+SYNC_RACINE=/home/votre-nom/editeur-sync/projets
+```
+
+Le serveur **refuse de démarrer** si ce dossier n'est pas utilisable, et
+affiche les deux commandes à lancer. Il ne se contente pas de démarrer pour
+échouer au premier dépôt de manuscrit : ce serait le pire moment pour
+l'apprendre.
 
 Base de données :
 
@@ -94,11 +121,19 @@ chmod 600 .env            # il contient le mot de passe de la base
 
 Puis remplissez `.env` — le fichier d'exemple explique chaque variable.
 
-Premier compte :
+**Premier compte — sans lui, personne ne peut se connecter.** La table
+`comptes` est vide au départ, et c'est voulu : le protocole ne comporte aucun
+point d'entrée d'inscription (voir plus haut). Les comptes se créent donc à la
+main, ici :
 
 ```bash
-node compte.js creer elise
+node compte.js creer elise      # le mot de passe est demandé, sans écho
+node compte.js lister           # vérifier que le compte existe
 ```
+
+Tant que cette étape n'est pas faite, l'éditeur répondra « Identifiant ou mot
+de passe incorrect » — la même réponse que pour un mot de passe faux, puisque
+distinguer les deux permettrait d'énumérer les comptes.
 
 ---
 
@@ -163,11 +198,14 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo useradd --system --no-create-home editeur-sync
-sudo chown -R editeur-sync /var/lib/editeur-sync
+sudo systemctl daemon-reload
 sudo systemctl enable --now editeur-sync
 sudo journalctl -u editeur-sync -f
 ```
+
+Le compte `editeur-sync` et les droits sur `/var/lib/editeur-sync` doivent
+avoir été mis en place à l'installation (voir plus haut). Si le service refuse
+de démarrer, `journalctl` affichera exactement ce qui manque.
 
 ---
 
