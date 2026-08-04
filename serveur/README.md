@@ -32,11 +32,19 @@ serveur de plus à tenir à jour sur ce terrain-là.
 
 ## Choix qui méritent d'être connus
 
-**Aucune dépendance npm, sauf le pilote MariaDB.** Le module `http` de Node
-fournit un serveur éprouvé par des millions de sites. Ce projet écrit lui-même
-son archive ZIP et son empreinte SHA-256 — mais pas son analyseur HTTP :
-celui-ci reçoit ce que n'importe qui lui envoie, et c'est historiquement l'une
-des sources de failles les plus productives.
+**Deux dépendances npm au plus** : `mysql2`, indispensable, et `dotenv`, qui
+est **facultatif**. Le module `http` de Node fournit un serveur éprouvé par des
+millions de sites : ce projet écrit lui-même son archive ZIP et son empreinte
+SHA-256, mais pas son analyseur HTTP — celui-ci reçoit ce que n'importe qui lui
+envoie, et c'est historiquement l'une des sources de failles les plus
+productives.
+
+**La configuration vient de l'environnement, pas d'un fichier.** `.env` n'est
+qu'une façon commode de remplir cet environnement ; systemd sait le faire tout
+seul avec `EnvironmentFile=`. C'est pourquoi `dotenv` est chargé dans un
+`try` : absent, le serveur lit l'environnement tel quel et fonctionne
+normalement. Les tests, eux, n'ont besoin ni de l'un ni de l'autre — c'est ce
+qui leur permet de tourner sans aucune installation.
 
 **Les manuscrits sont des fichiers, pas des lignes de base.** Un dossier par
 projet. La base ne contient que ce qu'elle fait bien : comptes, jetons,
@@ -80,9 +88,11 @@ Le compte de base n'a **que** les quatre droits nécessaires : ni `DROP`, ni
 Configuration :
 
 ```bash
-cp config.exemple.json config.json
-chmod 600 config.json     # il contient le mot de passe de la base
+cp .env.exemple .env
+chmod 600 .env            # il contient le mot de passe de la base
 ```
+
+Puis remplissez `.env` — le fichier d'exemple explique chaque variable.
 
 Premier compte :
 
@@ -109,9 +119,14 @@ remonte, écriture sur un partage en lecture seule, écrasement sans `If-Match`.
 Puis, en conditions réelles :
 
 ```bash
-node serveur.js config.json
+node serveur.js
 curl http://127.0.0.1:8080/api/version
 ```
+
+Si une variable manque, le serveur **refuse de démarrer** et dit laquelle. Un
+serveur qui démarrerait avec un mot de passe vide, échouerait à joindre la base
+et répondrait « panne » à chaque client serait bien plus difficile à
+diagnostiquer.
 
 ---
 
@@ -128,7 +143,12 @@ After=network.target mariadb.service
 Type=simple
 User=editeur-sync
 WorkingDirectory=/opt/editeur-sync
-ExecStart=/usr/bin/node serveur.js config.json
+
+# Deux façons de fournir la configuration, au choix :
+#   - laisser le fichier .env dans WorkingDirectory (dotenv le lira) ;
+#   - ou la donner à systemd, et se passer entièrement de dotenv :
+# EnvironmentFile=/etc/editeur-sync.env
+ExecStart=/usr/bin/node serveur.js
 Restart=on-failure
 
 # Le serveur n'a besoin que de son dossier de projets.

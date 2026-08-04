@@ -23,10 +23,8 @@
 const readline = require('readline');
 const coeur = require('./coeur');
 
-function lireConfig() {
-  const fichier = process.env.EDITEUR_SYNC_CONFIG || 'config.json';
-  return JSON.parse(require('fs').readFileSync(fichier, 'utf8'));
-}
+// Même configuration que le serveur, lue au même endroit : voir config.js.
+const { charger } = require('./config');
 
 // Saisie sans écho : rien ne s'affiche, pas même des étoiles (leur nombre
 // renseignerait quiconque regarde par-dessus l'épaule).
@@ -51,18 +49,18 @@ function demanderSecret(invite) {
 
 async function principal() {
   const [action, argument, argument2] = process.argv.slice(2);
-  const config = lireConfig();
-  const { magasinMariaDB } = require('./base');
 
   if (!action) {
     console.log('Usage : node compte.js creer|motdepasse|partager|lister [arguments]');
     process.exit(1);
   }
 
+  const config = charger();
+
   const mysql = require('mysql2/promise');
   const lien = await mysql.createConnection({
-    host: config.base.hote || '127.0.0.1',
-    port: config.base.port || 3306,
+    host: config.base.hote,
+    port: config.base.port,
     user: config.base.utilisateur,
     password: config.base.motDePasse,
     database: config.base.nom,

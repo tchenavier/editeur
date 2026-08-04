@@ -3,7 +3,7 @@
 --     mysql -u root -p < schema.sql
 --
 -- CE QUI N'EST PAS ICI : les manuscrits. Ce sont des fichiers, rangés
--- dans un dossier par projet (voir « racine » dans config.json). Une base
+-- dans un dossier par projet (voir SYNC_RACINE dans .env). Une base
 -- sert aux relations et aux recherches ; y mettre des documents
 -- compliquerait les sauvegardes sans rien apporter.
 --

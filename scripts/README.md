@@ -10,6 +10,10 @@ build\editeur.exe           REM à lancer depuis la RACINE du projet
 
 Pour les tests (aucune dépendance externe requise) : `scripts\build_tests.bat`.
 
+**Passez toujours par ces scripts plutôt que d'appeler `cl` directement.** Le
+compilateur n'est pas sur le `PATH` et ne s'y trouvera jamais : voir le point 1
+ci-dessous, qui est la cause la plus fréquente de « compilateur introuvable ».
+
 ---
 
 ## Les dépendances, et pourquoi elles sont si légères
@@ -50,7 +54,74 @@ celles dont il a besoin (`#pragma comment(lib, ...)`) et charge
 
 ## Points d'attention rencontrés
 
-### 1. Lancer l'application depuis la racine du projet
+### 1. Trouver le compilateur : `cl.exe` n'est jamais sur le `PATH`
+
+C'est le premier obstacle de toute nouvelle session de travail, et il se
+représente à chaque fois. Une invite PowerShell ou cmd fraîche **ne voit pas**
+`cl.exe` :
+
+```bat
+where cl        REM ne trouve rien
+```
+
+Il faut d'abord charger l'environnement Visual Studio. Sur cette machine :
+
+```bat
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+```
+
+C'est ce que fait la première ligne utile de chacun des scripts de ce dossier —
+raison de plus pour les utiliser plutôt que d'appeler `cl` à la main. Si vous y
+tenez malgré tout, en une seule commande :
+
+```bat
+cmd /c "call \"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat\" >nul && cl /nologo /std:c++17 /utf-8 /EHsc /W4 ..."
+```
+
+**Le piège du piège : `vswhere.exe` n'est pas non plus sur le `PATH`.** C'est
+l'outil standard pour localiser une installation de Visual Studio ; qui suit la
+méthode habituelle échoue donc à trouver quoi que ce soit. Il existe pourtant,
+mais à un endroit que rien n'annonce :
+
+```
+C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe
+```
+
+Notez le **`(x86)`**, alors que Visual Studio lui-même est installé dans
+`C:\Program Files\` sans suffixe. C'est ce décalage qui met en échec la
+détection automatique. Interrogé directement, il répond correctement :
+
+```bat
+"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+```
+
+Ce même `vswhere` introuvable explique le message qui s'affiche en tête de
+**chaque** compilation :
+
+```
+'vswhere.exe' n'est pas reconnu en tant que commande interne ou externe...
+```
+
+Il vient de `vcvars64.bat`, qui le cherche sur le `PATH`. **C'est un
+avertissement sans conséquence** : vcvars poursuit et configure correctement
+l'environnement. Ne cherchez pas à le corriger, et surtout ne prenez pas une
+compilation qui l'affiche pour une compilation ratée — regardez le code de
+sortie, pas ce message.
+
+Pour référence, ce que produit l'installation actuelle :
+
+| | |
+|---|---|
+| Compilateur | MSVC 19.51.36248 pour x64 |
+| Chemin | `…\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe` |
+| Édition | Visual Studio 18 Community |
+
+Le chemin de `vcvars64.bat` est **écrit en dur** dans les quatre scripts. C'est
+assumé : le découvrir demanderait précisément le `vswhere` qui manque. Si
+Visual Studio change de version ou d'emplacement, ce sont ces quatre lignes
+qu'il faut mettre à jour.
+
+### 2. Lancer l'application depuis la racine du projet
 
 `main_webview.cpp` charge l'interface depuis `ui/index.html` par un chemin
 **relatif au répertoire courant**. Lancée depuis ailleurs, l'application
@@ -58,7 +129,7 @@ démarre quand même mais affiche une page de démonstration minimale au lieu
 de l'éditeur. À terme, l'interface sera embarquée dans le binaire (prévu au
 cadrage) et ce problème disparaîtra.
 
-### 2. `<windows.h>` qui ne compile pas : ce n'était pas le SDK
+### 3. `<windows.h>` qui ne compile pas : ce n'était pas le SDK
 
 Pendant longtemps ce projet a cru à un bug du SDK Windows 10.0.26100 :
 `<windows.h>` refusait de compiler, `winbase.h` utilisant des types
@@ -95,7 +166,7 @@ Les définitions `_WIN32_WINNT 0x0501` de `main_webview.cpp` et
 n'utilisent aucune API plus récente. Elles ne sont simplement plus
 nécessaires.
 
-### 3. Export PDF : impression asynchrone
+### 4. Export PDF : impression asynchrone
 
 L'export PDF (Phase 4) passe par `ICoreWebView2_7::PrintToPdf`, c'est-à-dire
 le moteur de rendu du webview lui-même (choix du cadrage). **Cette API est
@@ -110,7 +181,7 @@ Si le runtime WebView2 installé est trop ancien pour `ICoreWebView2_7`, la
 commande échoue proprement et l'interface se rabat sur la boîte
 d'impression du système (« Enregistrer au format PDF »).
 
-### 4. Sous-système console
+### 5. Sous-système console
 
 L'exécutable ouvre une console à côté de la fenêtre : voulu pendant le
 développement (on y lit les messages du moteur). Pour une version
@@ -322,13 +393,14 @@ copie.**
 | `test_project` | Inventaire du projet et journal des modifications |
 | `test_diff` | Alignement de deux versions, découpage en phrases |
 | `test_reflow` | Redécoupage d'un texte aplati d'après une version de référence |
+| `test_roadmap` | Feuille de route : échéances vérifiées sans horloge, fichier abîmé sans perte |
 | `test_sync` | Moteur de synchronisation : plan à trois inventaires, conflits, reprise |
 | `test_net` | Client de protocole contre un transport simulé, réponses hostiles |
 | `test_http` | Transport réel, contre un serveur jouet lancé par le test |
 | `test_runner` | Exécution d'un plan : panne qui arrête tout, refus isolé qui n'arrête rien, confinement des chemins au dossier du projet |
 | `test_bridge` | Le pont de bout en bout : toutes les commandes, dont « tout marche hors ligne » et « aucun réseau tant qu'on ne se connecte pas » |
 
-20 suites, 191 cas, sans framework externe.
+21 suites, 200 cas, sans framework externe.
 
 Le serveur, lui, a ses propres tests en JavaScript (voir
 [`../serveur/README.md`](../serveur/README.md)) : ils ne demandent ni base de

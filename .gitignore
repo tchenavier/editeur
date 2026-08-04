@@ -31,9 +31,10 @@ json-develop.zip
 /Projet_Editeur_de_texte.pdf
 
 # Serveur : la configuration contient le MOT DE PASSE DE LA BASE, elle ne
-# doit jamais être versionnée. Seul config.exemple.json l'est.
-/serveur/config.json
+# doit jamais être versionnée. Seul .env.exemple l'est.
+/serveur/.env
 /serveur/node_modules/
+/serveur/package.json
 /serveur/package-lock.json
 
 

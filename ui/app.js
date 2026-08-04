@@ -103,6 +103,37 @@ if (typeof window.cppInvoke !== "function") {
     function sameSet(a, b) { if (a.size !== b.size) return false; for (const x of a) if (!b.has(x)) return false; return true; }
     function allBlocks() { return blocks.map(serialize); }
 
+    // Feuille de route simulée, en mémoire seulement.
+    let mockRoadmap = [
+      { id: "rm-1", title: "Acte I : Le Destin de Cendres",
+        summary: "Regina boit l'élixir. Blanche assiste, sans comprendre.",
+        state: "termine", deadline: "", chapter: "", cards: [],
+        extraLead: 0, notified: false, extraNotified: false },
+      { id: "rm-2", title: "Acte IV : Le Regard du Chasseur",
+        summary: "Stephane retrouve Regina. Le choc est brutal.",
+        state: "en-cours", deadline: "2026-12-24", chapter: "", cards: [],
+        extraLead: 1440, notified: false, extraNotified: false },
+    ];
+
+    // Miroir simplifié de io::dueStateOf, pour que l'aperçu montre les
+    // mêmes états que l'application.
+    function mockDue(part, now, lead) {
+      if (!part.deadline || part.state === "termine") return { due: "aucune", remind: false };
+      const avecHeure = part.deadline.length === 16;
+      const base = Date.parse(part.deadline.replace(" ", "T") +
+                              (avecHeure ? ":00Z" : "T00:00:00Z"));
+      if (!Number.isFinite(base)) return { due: "aucune", remind: false };
+      const echeance = Math.floor(base / 1000);
+      if (avecHeure) {
+        if (now >= echeance) return { due: "retard", remind: true };
+        if (now >= echeance - lead * 60) return { due: "bientot", remind: true };
+        return { due: "loin", remind: false };
+      }
+      if (now >= echeance + 86400) return { due: "retard", remind: true };
+      if (now >= echeance) return { due: "aujourdhui", remind: true };
+      return { due: "loin", remind: false };
+    }
+
     // État de compte simulé, en mémoire seulement (Phase 5, jalon C).
     const mockAccount = {
       connected: false, server: "", user: "",
@@ -597,6 +628,57 @@ if (typeof window.cppInvoke !== "function") {
       "sync.run": () => {
         throw new Error("Synchronisation indisponible dans l'aperçu (moteur simulé) : "
                         + "lancez l'application.");
+      },
+
+      // --- Suivi de projet ---------------------------------------------
+      // Simulé EN MÉMOIRE : l'écran se règle sans disque, et les états
+      // d'échéance sont recalculés comme le fait le C++.
+      "roadmap.get": (p) => {
+        const now = p.now || 0;
+        const lead = p.lead || 60;
+        return {
+          count: mockRoadmap.length,
+          lead: lead,
+          path: "(aperçu)",
+          toRemind: 0,
+          parts: mockRoadmap.map((part) => {
+            const info = mockDue(part, now, lead);
+            return Object.assign({}, part, {
+              due: info.due,
+              remind: info.remind && !part.notified,
+              remindExtra: false,
+              chapterWords: part.chapter ? 120 : -1,
+            });
+          }),
+        };
+      },
+      "roadmap.save": (p) => {
+        mockRoadmap = (p.parts || []).map((x) => Object.assign({}, x));
+        return { count: mockRoadmap.length };
+      },
+      "roadmap.add": (p) => {
+        const id = "rm-" + (mockRoadmap.length + 1);
+        mockRoadmap.push({ id: id, title: p.title || "Nouvelle partie", summary: "",
+                           state: "prevu", deadline: "", chapter: "", cards: [],
+                           extraLead: 0, notified: false, extraNotified: false });
+        return { id: id, count: mockRoadmap.length };
+      },
+      "roadmap.remove": (p) => {
+        const avant = mockRoadmap.length;
+        mockRoadmap = mockRoadmap.filter((x) => x.id !== p.id);
+        return { removed: mockRoadmap.length !== avant, count: mockRoadmap.length };
+      },
+      "roadmap.move": (p) => {
+        const i = mockRoadmap.findIndex((x) => x.id === p.id);
+        const j = i + (p.direction === "down" ? 1 : -1);
+        if (i < 0 || j < 0 || j >= mockRoadmap.length) return { moved: false };
+        const t = mockRoadmap[i]; mockRoadmap[i] = mockRoadmap[j]; mockRoadmap[j] = t;
+        return { moved: true };
+      },
+      "roadmap.notified": (p) => {
+        const part = mockRoadmap.find((x) => x.id === p.id);
+        if (part) { if (p.extra) part.extraNotified = true; else part.notified = true; }
+        return { noted: !!part };
       },
     };
 
@@ -2104,6 +2186,12 @@ async function doOpenFlow() {
     setCaret(0, 0);
     refreshStatus();
     setStatus("Fichier ouvert.");
+    // Le suivi est lu À L'OUVERTURE — c'est le moment où l'on décide de
+    // ce qu'on va écrire. Il reprend au passage les rappels de l'ancienne
+    // version, qui vivaient dans le navigateur et ne suivaient donc pas
+    // le manuscrit.
+    await migrerAnciensRappels();
+    await verifierEcheances(true);
   } catch (err) { reportError(err); }
 }
 
@@ -3027,6 +3115,7 @@ function renderAlertsPanel() {
   document.getElementById("sessionEnabled").checked = alerts.session.enabled;
   document.getElementById("sessionWork").value = alerts.session.workMin;
   document.getElementById("sessionBreak").value = alerts.session.breakMin;
+  document.getElementById("preavisMin").value = String(roadmapLead());
   renderReminders();
 }
 
@@ -3042,6 +3131,18 @@ function readAlertsPanel() {
 }
 ["sessionEnabled", "sessionWork", "sessionBreak"].forEach((id) => {
   document.getElementById(id).addEventListener("change", readAlertsPanel);
+});
+
+// Préavis des échéances du suivi : combien de temps avant on prévient.
+document.getElementById("preavisMin").addEventListener("change", (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!Number.isFinite(v) || v < 1 || v > 10080) {
+    e.target.value = String(roadmapLead());
+    setSettingsMsg("Le préavis doit tenir entre 1 minute et une semaine.", true);
+    return;
+  }
+  try { localStorage.setItem("editeur.preavis", String(v)); } catch (_) {}
+  setSettingsMsg("Préavis réglé sur " + v + " minute(s).");
 });
 
 document.getElementById("reminderAdd").addEventListener("click", () => {
@@ -4123,6 +4224,432 @@ document.getElementById("compareReflow").addEventListener("click", async () => {
     setStatus(resultat.count + " paragraphe(s) retrouvé(s).");
   } catch (err) { reportError(err); }
 });
+
+// =====================================================================
+// 14nonies. Suivi de projet : la feuille de route du roman
+//
+//   Une vue d'ensemble de ce qui est prévu : parties ordonnées, résumés
+//   libres, fiches rattachées, échéances. Le fichier vit À CÔTÉ DU
+//   MANUSCRIT (roman_suivi.md), donc il voyage avec le projet, se
+//   sauvegarde avec lui et se synchronise avec lui.
+//
+//   DEUX PRINCIPES, hérités du reste de l'éditeur :
+//
+//   « L'avancement se lit, il ne se saisit pas. » Une partie rattachée à
+//   un chapitre affiche le nombre de mots réellement écrits. Un
+//   pourcentage tapé à la main est faux dès le lendemain.
+//
+//   « On ne dérange pas l'auteur qui écrit. » Les rappels passent par la
+//   bannière non bloquante, jamais par une fenêtre modale, et un rappel
+//   donné ne revient pas.
+// =====================================================================
+const roadmapView = document.getElementById("roadmapView");
+const roadmapState = { parts: [], lead: 60, loaded: false };
+
+// Préavis en minutes, paramétrable dans l'onglet Alertes.
+function roadmapLead() {
+  try {
+    const v = parseInt(localStorage.getItem("editeur.preavis") || "60", 10);
+    return (Number.isFinite(v) && v > 0 && v <= 10080) ? v : 60;
+  } catch (_) { return 60; }
+}
+
+// L'instant courant en secondes, dans le repère LOCAL de l'auteur. Le C++
+// ne devine aucun fuseau : c'est le navigateur qui sait, il le dit.
+function localNowSeconds() {
+  const d = new Date();
+  return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 1000);
+}
+
+async function loadRoadmap(withNow) {
+  if (!state.filePath) { roadmapState.parts = []; roadmapState.loaded = false; return null; }
+  const r = await invoke("roadmap.get", {
+    path: state.filePath,
+    now: withNow ? localNowSeconds() : 0,
+    lead: roadmapLead(),
+  });
+  roadmapState.parts = r.parts || [];
+  roadmapState.lead = r.lead || 60;
+  roadmapState.loaded = true;
+  return r;
+}
+
+async function saveRoadmap() {
+  if (!state.filePath) return;
+  try {
+    await invoke("roadmap.save", { path: state.filePath, parts: roadmapState.parts });
+  } catch (err) { reportError(err); }
+}
+
+const ETATS_PARTIE = [["prevu", "Prévu"], ["en-cours", "En cours"], ["termine", "Terminé"]];
+
+function libelleEcheance(partie) {
+  if (!partie.deadline) return "";
+  if (partie.due === "retard") return "en retard — " + partie.deadline;
+  if (partie.due === "aujourdhui") return "aujourd'hui";
+  if (partie.due === "bientot") return "bientôt — " + partie.deadline;
+  return partie.deadline;
+}
+
+// Les titres de chapitres du manuscrit, tels qu'ils sont à cet instant.
+function titresDeChapitres() {
+  return state.blocks
+    .filter((b) => b.type && b.type !== "p")
+    .map((b) => b.text)
+    .filter((t) => t && t.trim() !== "");
+}
+
+function titreDeFiche(id) {
+  const fiche = cardsState.list.find((c) => c.id === id);
+  return fiche ? (fiche.title || id) : id;
+}
+
+function renderRoadmap() {
+  const liste = document.getElementById("roadmapList");
+  liste.textContent = "";
+  document.getElementById("roadmapEmpty").hidden = roadmapState.parts.length > 0;
+
+  roadmapState.parts.forEach((partie, index) => {
+    const bloc = document.createElement("div");
+    bloc.className = "rm-partie";
+
+    // --- Titre, état, outils ---
+    const ligne = document.createElement("div");
+    ligne.className = "rm-ligne";
+
+    const titre = document.createElement("input");
+    titre.type = "text";
+    titre.className = "rm-titre";
+    titre.value = partie.title || "";
+    titre.placeholder = "Titre de la partie";
+    titre.addEventListener("change", () => { partie.title = titre.value; saveRoadmap(); });
+
+    const etat = document.createElement("select");
+    for (const [valeur, texte] of ETATS_PARTIE) {
+      const opt = document.createElement("option");
+      opt.value = valeur;
+      opt.textContent = texte;
+      etat.appendChild(opt);
+    }
+    etat.value = partie.state || "prevu";
+    etat.addEventListener("change", () => { partie.state = etat.value; saveRoadmap(); });
+
+    const outils = document.createElement("div");
+    outils.className = "rm-outils";
+    const monter = document.createElement("button");
+    monter.textContent = "↑";
+    monter.title = "Monter";
+    monter.disabled = index === 0;
+    monter.addEventListener("click", () => deplacerPartie(partie.id, "up"));
+    const descendre = document.createElement("button");
+    descendre.textContent = "↓";
+    descendre.title = "Descendre";
+    descendre.disabled = index === roadmapState.parts.length - 1;
+    descendre.addEventListener("click", () => deplacerPartie(partie.id, "down"));
+    const suppr = document.createElement("button");
+    suppr.textContent = "✕";
+    suppr.title = "Supprimer cette partie";
+    suppr.addEventListener("click", () => supprimerPartie(partie));
+    outils.append(monter, descendre, suppr);
+
+    ligne.append(titre, etat, outils);
+    bloc.appendChild(ligne);
+
+    // --- Résumé libre ---
+    const resume = document.createElement("textarea");
+    resume.className = "rm-resume";
+    resume.value = partie.summary || "";
+    resume.placeholder = "Ce qui doit se passer dans cette partie…";
+    resume.addEventListener("change", () => { partie.summary = resume.value; saveRoadmap(); });
+    bloc.appendChild(resume);
+
+    // --- Échéance, rappel, chapitre, avancement ---
+    const meta = document.createElement("div");
+    meta.className = "rm-meta";
+
+    const labelDate = document.createElement("label");
+    labelDate.append(document.createTextNode("Échéance "));
+    const date = document.createElement("input");
+    date.type = "text";
+    date.value = partie.deadline || "";
+    date.size = 17;
+    date.placeholder = "AAAA-MM-JJ ou …T18:00";
+    date.title = "Une date seule prévient le jour même. Avec une heure, "
+               + "l'éditeur prévient au bout du préavis.";
+    date.addEventListener("change", () => {
+      partie.deadline = date.value.trim();
+      partie.notified = false;      // nouvelle échéance : le rappel redevient dû
+      partie.extraNotified = false;
+      saveRoadmap().then(rafraichirRoadmap);
+    });
+    labelDate.appendChild(date);
+    meta.appendChild(labelDate);
+
+    if (partie.deadline) {
+      const etatEcheance = document.createElement("span");
+      etatEcheance.className = "rm-echeance " + (partie.due || "");
+      etatEcheance.textContent = libelleEcheance(partie);
+      meta.appendChild(etatEcheance);
+    }
+
+    const labelRappel = document.createElement("label");
+    labelRappel.append(document.createTextNode("Rappel en plus "));
+    const rappel = document.createElement("select");
+    for (const [valeur, texte] of [[0, "aucun"], [60, "1 h avant"], [1440, "la veille"],
+                                   [4320, "3 jours avant"], [10080, "1 semaine avant"]]) {
+      const opt = document.createElement("option");
+      opt.value = String(valeur);
+      opt.textContent = texte;
+      rappel.appendChild(opt);
+    }
+    rappel.value = String(partie.extraLead || 0);
+    rappel.addEventListener("change", () => {
+      partie.extraLead = parseInt(rappel.value, 10) || 0;
+      partie.extraNotified = false;
+      saveRoadmap();
+    });
+    labelRappel.appendChild(rappel);
+    meta.appendChild(labelRappel);
+
+    // Chapitre rattaché : facultatif, et c'est lui qui donne l'avancement.
+    const labelChap = document.createElement("label");
+    labelChap.append(document.createTextNode("Chapitre "));
+    const chap = document.createElement("select");
+    const aucun = document.createElement("option");
+    aucun.value = "";
+    aucun.textContent = "(aucun)";
+    chap.appendChild(aucun);
+    for (const titreChap of titresDeChapitres()) {
+      const opt = document.createElement("option");
+      opt.value = titreChap;
+      opt.textContent = titreChap;
+      chap.appendChild(opt);
+    }
+    // Un chapitre disparu reste proposé, sinon le lien s'effacerait tout seul.
+    if (partie.chapter && !Array.from(chap.options).some((o) => o.value === partie.chapter)) {
+      const opt = document.createElement("option");
+      opt.value = partie.chapter;
+      opt.textContent = partie.chapter + " (introuvable)";
+      chap.appendChild(opt);
+    }
+    chap.value = partie.chapter || "";
+    chap.addEventListener("change", () => {
+      partie.chapter = chap.value;
+      saveRoadmap().then(rafraichirRoadmap);
+    });
+    labelChap.appendChild(chap);
+    meta.appendChild(labelChap);
+
+    if (partie.chapter) {
+      const avancement = document.createElement("span");
+      avancement.className = "rm-avancement";
+      avancement.textContent = (partie.chapterWords >= 0)
+        ? partie.chapterWords + " mot(s) écrit(s)"
+        : "chapitre introuvable";
+      meta.appendChild(avancement);
+    }
+
+    bloc.appendChild(meta);
+
+    // --- Fiches rattachées ---
+    const fiches = document.createElement("div");
+    fiches.className = "rm-meta";
+    fiches.append(document.createTextNode("Fiches "));
+    const listeFiches = document.createElement("div");
+    listeFiches.className = "rm-fiches";
+    for (const idFiche of partie.cards || []) {
+      const puce = document.createElement("span");
+      puce.className = "rm-fiche";
+      puce.textContent = titreDeFiche(idFiche);
+      const retirer = document.createElement("button");
+      retirer.textContent = "✕";
+      retirer.title = "Détacher cette fiche";
+      retirer.addEventListener("click", () => {
+        partie.cards = (partie.cards || []).filter((x) => x !== idFiche);
+        saveRoadmap().then(renderRoadmap);
+      });
+      puce.appendChild(retirer);
+      listeFiches.appendChild(puce);
+    }
+    fiches.appendChild(listeFiches);
+
+    const ajoutFiche = document.createElement("select");
+    const vide = document.createElement("option");
+    vide.value = "";
+    vide.textContent = "+ rattacher une fiche…";
+    ajoutFiche.appendChild(vide);
+    for (const fiche of cardsState.list) {
+      if ((partie.cards || []).includes(fiche.id)) continue;
+      const opt = document.createElement("option");
+      opt.value = fiche.id;
+      opt.textContent = (fiche.title || fiche.id) + " (" + (fiche.type || "") + ")";
+      ajoutFiche.appendChild(opt);
+    }
+    ajoutFiche.addEventListener("change", () => {
+      if (!ajoutFiche.value) return;
+      partie.cards = (partie.cards || []).concat([ajoutFiche.value]);
+      saveRoadmap().then(renderRoadmap);
+    });
+    fiches.appendChild(ajoutFiche);
+    bloc.appendChild(fiches);
+
+    liste.appendChild(bloc);
+  });
+
+  const enRetard = roadmapState.parts.filter((p) => p.due === "retard").length;
+  const faites = roadmapState.parts.filter((p) => p.state === "termine").length;
+  const morceaux = [roadmapState.parts.length + " partie(s)"];
+  if (faites) morceaux.push(faites + " terminée(s)");
+  if (enRetard) morceaux.push(enRetard + " en retard");
+  document.getElementById("roadmapStats").textContent = morceaux.join(" · ");
+}
+
+async function rafraichirRoadmap() {
+  try {
+    await loadRoadmap(true);
+    renderRoadmap();
+  } catch (err) { reportError(err); }
+}
+
+async function deplacerPartie(id, direction) {
+  try {
+    await invoke("roadmap.move", { path: state.filePath, id: id, direction: direction });
+    await rafraichirRoadmap();
+  } catch (err) { reportError(err); }
+}
+
+async function supprimerPartie(partie) {
+  const ok = await askConfirm(
+    "Supprimer « " + (partie.title || "cette partie") + " » de la feuille de route ? "
+    + "Le texte déjà écrit dans le manuscrit n'est pas touché.",
+    "Supprimer", "Supprimer une partie");
+  if (!ok) return;
+  try {
+    await invoke("roadmap.remove", { path: state.filePath, id: partie.id });
+    await rafraichirRoadmap();
+  } catch (err) { reportError(err); }
+}
+
+function showRoadmap(visible) {
+  roadmapView.hidden = !visible;
+  document.getElementById("workspace").hidden = visible;
+  if (visible) {
+    document.getElementById("cardsView").hidden = true;
+    compareView.hidden = true;
+    findBar.hidden = true;
+  }
+  document.querySelectorAll(".editor-only").forEach((el) => { el.hidden = visible; });
+}
+
+document.getElementById("roadmapBtn").addEventListener("click", async () => {
+  if (!state.filePath) {
+    setStatus("Enregistrez d'abord le manuscrit : le suivi se range à côté du fichier.");
+    return;
+  }
+  try {
+    // Les fiches servent aux rattachements : on s'assure de les avoir.
+    if (!cardsState.list.length) await refreshCardList();
+    await loadRoadmap(true);
+    renderRoadmap();
+    showRoadmap(true);
+  } catch (err) { reportError(err); }
+});
+
+document.getElementById("roadmapClose").addEventListener("click", () => {
+  showRoadmap(false);
+  focusActive();
+});
+
+document.getElementById("roadmapAdd").addEventListener("click", async () => {
+  try {
+    await invoke("roadmap.add", { path: state.filePath, title: "Nouvelle partie" });
+    await rafraichirRoadmap();
+    const liste = document.getElementById("roadmapList");
+    liste.scrollTop = liste.scrollHeight; // la nouvelle partie est en bas
+  } catch (err) { reportError(err); }
+});
+
+// --- Les rappels ------------------------------------------------------
+//
+// Le suivi n'est lu qu'à l'OUVERTURE du manuscrit, puis à l'approche
+// d'une échéance. Pas de sollicitation permanente : on n'interrompt pas
+// quelqu'un qui écrit pour lui rappeler qu'il doit écrire.
+async function verifierEcheances(annoncerLeBilan) {
+  if (!state.filePath) return;
+  try {
+    const r = await loadRoadmap(true);
+    if (!r) return;
+
+    for (const partie of r.parts) {
+      if (partie.remind) {
+        const quoi = partie.title || "Une partie";
+        const texte = (partie.due === "retard")
+          ? "Échéance dépassée : « " + quoi + " » (" + partie.deadline + ")."
+          : (partie.due === "aujourdhui")
+            ? "Échéance aujourd'hui : « " + quoi + " »."
+            : "Échéance proche : « " + quoi + " » à " + partie.deadline + ".";
+        showAlert(texte, "🗺");
+        await invoke("roadmap.notified", { path: state.filePath, id: partie.id });
+      } else if (partie.remindExtra) {
+        showAlert("Rappel : « " + (partie.title || "une partie") + " » est prévue pour "
+                  + partie.deadline + ".", "🗺");
+        await invoke("roadmap.notified",
+                     { path: state.filePath, id: partie.id, extra: true });
+      }
+    }
+
+    // Bilan d'ouverture : une seule phrase, et seulement s'il y a de quoi
+    // dire quelque chose.
+    if (annoncerLeBilan) {
+      const restantes = r.parts.filter((p) => p.state !== "termine").length;
+      if (restantes > 0) {
+        setStatus(restantes + " partie(s) encore à écrire — bouton « Suivi » pour les voir.");
+      }
+    }
+  } catch (_) {
+    // Un suivi illisible ne doit jamais empêcher d'écrire.
+  }
+}
+
+// Vérification à intervalle large : c'est une échéance, pas un chronomètre.
+setInterval(() => { verifierEcheances(false); }, 5 * 60 * 1000);
+
+// Reprise des rappels de l'ancienne version.
+//
+// Ils vivaient dans le navigateur : ils ne suivaient donc pas le
+// manuscrit, et s'affichaient pour le mauvais roman dès qu'on en ouvrait
+// un autre. On les verse une fois dans la feuille de route du projet
+// courant, puis on les marque comme repris — sans les effacer, pour que
+// rien ne soit perdu si la reprise se passait mal.
+async function migrerAnciensRappels() {
+  if (!state.filePath) return;
+  let anciens = [];
+  try {
+    if (localStorage.getItem("editeur.rappelsRepris") === "oui") return;
+    anciens = (alerts.reminders || []).filter((r) => r && r.date && r.label);
+  } catch (_) { return; }
+  if (!anciens.length) {
+    try { localStorage.setItem("editeur.rappelsRepris", "oui"); } catch (_) {}
+    return;
+  }
+
+  try {
+    for (const ancien of anciens) {
+      await invoke("roadmap.add", {
+        path: state.filePath,
+        title: ancien.label,
+        deadline: ancien.date,
+        summary: "Rappel repris des paramètres.",
+      });
+    }
+    localStorage.setItem("editeur.rappelsRepris", "oui");
+    setStatus(anciens.length + " rappel(s) repris dans le suivi du projet.");
+  } catch (err) {
+    // La reprise échoue ? Les anciens rappels restent où ils sont : on
+    // réessaiera à la prochaine ouverture.
+    reportError(err);
+  }
+}
 
 // =====================================================================
 // 14 ter. Correcteur orthographique et synonymes (fin de Phase 1)

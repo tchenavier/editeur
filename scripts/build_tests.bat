@@ -97,6 +97,11 @@ cl %FLAGS% %INC% utils\Utf8.cpp core\TextModel.cpp core\Speller.cpp core\Diff.cp
    /Fo"%OUT%\\" /Fe"%OUT%\test_reflow.exe"
 if %errorlevel% neq 0 exit /b 1
 
+echo === Compilation test_roadmap ===
+cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp io\Yaml.cpp io\Roadmap.cpp ^
+   io\test_roadmap.cpp /Fo"%OUT%\\" /Fe"%OUT%\test_roadmap.exe"
+if %errorlevel% neq 0 exit /b 1
+
 echo === Compilation test_sync ===
 cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
    io\ProjectIndex.cpp io\SyncPlan.cpp io\test_sync.cpp ^
@@ -150,6 +155,7 @@ call :run test_project
 call :run test_speller
 call :run test_diff
 call :run test_reflow
+call :run test_roadmap
 call :run test_sync
 call :run test_net
 call :run test_runner

@@ -21,7 +21,6 @@
 'use strict';
 
 const http = require('http');
-const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 
@@ -291,11 +290,26 @@ function creerServeur(options) {
 
 module.exports = { creerServeur };
 
-// Lancement direct : « node serveur.js config.json »
+// Lancement direct : « node serveur.js »
+//
+// La configuration vient de l'environnement, éventuellement rempli par un
+// fichier .env (voir config.js). Elle n'est chargée QU'ICI : le module
+// lui-même reste utilisable sans aucun réglage, ce qui permet aux tests
+// de le monter avec un magasin en mémoire et un dossier temporaire.
 if (require.main === module) {
-  const fichierConfig = process.argv[2] || 'config.json';
-  const config = JSON.parse(fs.readFileSync(fichierConfig, 'utf8'));
+  const { charger } = require('./config');
   const { magasinMariaDB } = require('./base');
+
+  let config;
+  try {
+    config = charger();
+  } catch (erreur) {
+    // Un réglage manquant arrête le serveur, avec la liste de ce qui
+    // manque. Démarrer à moitié et répondre « panne » à chaque client
+    // serait bien pire.
+    console.error(erreur.message);
+    process.exit(1);
+  }
 
   magasinMariaDB(config.base).then((magasin) => {
     const serveur = creerServeur({
@@ -303,12 +317,12 @@ if (require.main === module) {
       racine: config.racine,
       journal: (m) => console.log(new Date().toISOString() + ' ' + m),
     });
-    serveur.listen(config.port || 8080, config.adresse || '127.0.0.1', () => {
-      console.log('editeur-sync écoute sur ' +
-                  (config.adresse || '127.0.0.1') + ':' + (config.port || 8080));
+    serveur.listen(config.port, config.adresse, () => {
+      console.log('editeur-sync écoute sur ' + config.adresse + ':' + config.port);
       console.log('racine des projets : ' + path.resolve(config.racine));
     });
   }).catch((e) => {
+    // Jamais le mot de passe dans un message d'erreur, même ici.
     console.error('Démarrage impossible : ' + e.message);
     process.exit(1);
   });

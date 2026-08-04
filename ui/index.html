@@ -93,6 +93,7 @@
     <button id="saveBtn" title="Enregistrer">Enregistrer</button>
     <button id="metaBtn" title="Métadonnées du manuscrit">Infos</button>
     <button id="exportBtn" title="Exporter en PDF ou en EPUB (Ctrl+P)">📤 Exporter</button>
+    <button id="roadmapBtn" title="Suivi du projet : parties prévues, résumés, échéances">🗺 Suivi</button>
     <button id="compareBtn" title="Comparer avec une autre version du manuscrit">⇄ Comparer</button>
     <button id="coherenceBtn" title="Analyse de cohérence (liens, fiches oubliées, personnages décédés)">⚑ Cohérence</button>
     <button id="settingsBtn" title="Paramètres (raccourcis)">Param.</button>
@@ -187,6 +188,26 @@
       <div id="cardFormMsg" class="settings-msg"></div>
     </div>
   </main>
+</div>
+
+<!-- Suivi de projet : la feuille de route du roman.
+     Une vue d'ensemble de ce qui est prévu, avec résumés, fiches
+     rattachées et échéances. Le fichier vit à côté du manuscrit, donc il
+     voyage avec lui et se synchronise avec lui. -->
+<div id="roadmapView" hidden>
+  <div id="roadmapHead">
+    <span class="cmp-titre">Suivi du projet</span>
+    <span class="cmp-stats" id="roadmapStats"></span>
+    <div class="spacer"></div>
+    <button id="roadmapAdd">+ Ajouter une partie</button>
+    <button id="roadmapClose">Fermer</button>
+  </div>
+  <div id="roadmapList"></div>
+  <div id="roadmapEmpty" hidden>
+    Aucune partie prévue pour l'instant. « Ajouter une partie » pour noter
+    une scène, un acte ou une échéance — même si le chapitre n'existe pas
+    encore.
+  </div>
 </div>
 
 <!-- Comparaison de deux versions. Les deux textes sont posés dans UNE
@@ -286,7 +307,19 @@
       <input id="sessionBreak" type="number" min="1" max="120" value="5">
     </div>
 
-    <div class="panel-head" style="margin-top:.9rem">Rappels par date</div>
+    <div class="panel-head" style="margin-top:.9rem">Échéances du suivi</div>
+    <p class="hint">Combien de temps avant une échéance faut-il vous prévenir ?
+      Les échéances elles-mêmes se règlent dans le suivi du projet (bouton
+      « 🗺 Suivi »), où elles accompagnent les parties prévues.</p>
+    <div class="field-row">
+      <label for="preavisMin">Préavis (minutes)</label>
+      <input id="preavisMin" type="number" min="1" max="10080" value="60">
+    </div>
+
+    <div class="panel-head" style="margin-top:.9rem">Anciens rappels par date</div>
+    <p class="hint">Ces rappels-ci étaient rangés dans le navigateur : ils ne
+      suivaient pas le manuscrit. Ils sont repris automatiquement dans le suivi
+      du projet à la prochaine ouverture d'un manuscrit.</p>
     <div id="reminderList"></div>
     <div class="field-row">
       <input id="reminderDate" type="date">

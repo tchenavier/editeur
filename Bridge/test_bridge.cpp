@@ -13,6 +13,8 @@
 #include "ExportApi.h"
 #include "ManuscriptApi.h"
 #include "ProjectApi.h"
+#include "Roadmap.h"
+#include "RoadmapApi.h"
 #include "SyncApi.h"
 #include "TextModel.h"
 #include "UndoManager.h"
@@ -1366,6 +1368,130 @@ int main() {
 
         std::filesystem::remove_all(dossier, ec);
         std::cout << "Test 27 OK (sync : trois conditions, aucune requete avant)\n";
+    }
+
+    // --- Test 28 : feuille de route via le pont ---
+    //
+    // Ce qui compte ici : l'AVANCEMENT ne se saisit pas, il se lit dans le
+    // manuscrit. Un pourcentage tapé à la main est faux le lendemain ;
+    // celui-ci ne peut pas mentir. Et les rappels ne se déclenchent qu'au
+    // bon moment, ce qu'on vérifie en déplaçant l'instant plutôt qu'en
+    // attendant.
+    {
+        const auto dossier = std::filesystem::temp_directory_path() / "test_bridge_suivi";
+        std::error_code ec;
+        std::filesystem::remove_all(dossier, ec);
+        std::filesystem::create_directories(dossier, ec);
+        const auto manuscrit = dossier / "roman.md";
+        const std::string chemin = manuscrit.string();
+
+        core::Document doc;
+        core::UndoManager undo;
+        auto ajoute = [&doc](core::BlockType type, const std::u32string& texte) {
+            core::TextBlock bloc(type);
+            bloc.insertText(0, texte);
+            doc.blocks().push_back(bloc);
+        };
+        ajoute(core::BlockType::Heading1, U"Acte I");
+        ajoute(core::BlockType::Paragraph, U"Un deux trois quatre cinq.");
+        ajoute(core::BlockType::Paragraph, U"Six sept.");
+        ajoute(core::BlockType::Heading1, U"Acte II");
+        ajoute(core::BlockType::Paragraph, U"Huit.");
+
+        bridge::Bridge pont;
+        bridge::ManuscriptApi fichiers(doc, undo);
+        bridge::RoadmapApi suivi(doc);
+        assert(fichiers.registerOn(pont));
+        assert(suivi.registerOn(pont));
+        assert(!suivi.registerOn(pont)); // doublon refusé
+        assert(call(pont, "file.save", {{"path", chemin}})["ok"] == true);
+
+        // Sans manuscrit enregistré : refus explicite, pas de plantage.
+        assert(call(pont, "roadmap.get", {{"path", ""}})["ok"] == false);
+
+        // Feuille vide au départ.
+        auto vue = call(pont, "roadmap.get", {{"path", chemin}});
+        assert(vue["ok"] == true);
+        assert(vue["result"]["count"] == 0);
+
+        // Ajout d'une partie, rattachée au premier chapitre.
+        auto ajout = call(pont, "roadmap.add", {{"path", chemin}, {"title", "Ouverture"}});
+        assert(ajout["ok"] == true);
+        const std::string id = ajout["result"]["id"];
+        assert(!id.empty());
+
+        json parties = json::array();
+        parties.push_back({{"id", id},
+                           {"title", "Ouverture"},
+                           {"summary", "Regina boit l'élixir.\nBlanche regarde."},
+                           {"state", "en-cours"},
+                           {"deadline", "2026-09-15T18:00"},
+                           {"chapter", "Acte I"},
+                           {"cards", json::array({"regina", "blanche"})},
+                           {"extraLead", 1440}});
+        assert(call(pont, "roadmap.save", {{"path", chemin}, {"parts", parties}})["ok"] == true);
+
+        // L'avancement est LU DANS LE MANUSCRIT : « Acte I » contient
+        // sept mots répartis sur deux paragraphes.
+        vue = call(pont, "roadmap.get", {{"path", chemin}, {"now", 0}});
+        const auto& partie = vue["result"]["parts"][0];
+        assert(partie["chapterWords"] == 7);
+        assert(partie["summary"] == "Regina boit l'élixir.\nBlanche regarde.");
+        assert(partie["cards"].size() == 2);
+
+        // Un chapitre rattaché qui n'existe pas se dit, plutôt que
+        // d'afficher zéro — qui ferait croire à un chapitre vide.
+        parties[0]["chapter"] = "Acte disparu";
+        call(pont, "roadmap.save", {{"path", chemin}, {"parts", parties}});
+        vue = call(pont, "roadmap.get", {{"path", chemin}, {"now", 0}});
+        assert(vue["result"]["parts"][0]["chapterWords"] == -1);
+        parties[0]["chapter"] = "Acte I";
+        call(pont, "roadmap.save", {{"path", chemin}, {"parts", parties}});
+
+        // LES RAPPELS. On se place aux instants qui comptent plutôt que
+        // d'attendre. L'échéance vaut 1789 minutes après l'époque… on la
+        // calcule via le module lui-même pour ne pas coder un nombre.
+        int64_t echeance = 0;
+        bool avecHeure = false;
+        assert(io::parseDeadline("2026-09-15T18:00", echeance, avecHeure));
+
+        // Deux heures avant : rien à signaler.
+        vue = call(pont, "roadmap.get", {{"path", chemin}, {"now", echeance - 7200}});
+        assert(vue["result"]["parts"][0]["due"] == "loin");
+        assert(vue["result"]["toRemind"] == 1); // le rappel de la veille, lui, est dû
+
+        // Une demi-heure avant : c'est le moment.
+        vue = call(pont, "roadmap.get", {{"path", chemin}, {"now", echeance - 1800}});
+        assert(vue["result"]["parts"][0]["due"] == "bientot");
+        assert(vue["result"]["parts"][0]["remind"] == true);
+
+        // Une fois le rappel donné, il ne revient pas.
+        assert(call(pont, "roadmap.notified", {{"path", chemin}, {"id", id}})["ok"] == true);
+        vue = call(pont, "roadmap.get", {{"path", chemin}, {"now", echeance - 1800}});
+        assert(vue["result"]["parts"][0]["remind"] == false);
+        assert(vue["result"]["parts"][0]["due"] == "bientot"); // l'état, lui, reste vrai
+
+        // Réorganisation et suppression.
+        auto second = call(pont, "roadmap.add", {{"path", chemin}, {"title", "Suite"}});
+        const std::string id2 = second["result"]["id"];
+        assert(call(pont, "roadmap.move",
+                    {{"path", chemin}, {"id", id2}, {"direction", "up"}})
+                   ["result"]["moved"] == true);
+        vue = call(pont, "roadmap.get", {{"path", chemin}});
+        assert(vue["result"]["parts"][0]["id"] == id2);
+
+        assert(call(pont, "roadmap.remove", {{"path", chemin}, {"id", id2}})
+                   ["result"]["removed"] == true);
+        assert(call(pont, "roadmap.remove", {{"path", chemin}, {"id", "inconnu"}})
+                   ["result"]["removed"] == false);
+        vue = call(pont, "roadmap.get", {{"path", chemin}});
+        assert(vue["result"]["count"] == 1);
+
+        // Le fichier voisine bien le manuscrit : il voyagera avec lui.
+        assert(std::filesystem::exists(dossier / "roman_suivi.md"));
+
+        std::filesystem::remove_all(dossier, ec);
+        std::cout << "Test 28 OK (feuille de route : avancement lu, rappels au bon moment)\n";
     }
 
     std::cout << "Tous les tests du pont sont passes.\n";

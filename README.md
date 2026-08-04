@@ -18,8 +18,8 @@ quitte la machine.
 le formatage stocké *par caractère* — indispensable en français pour « 1ᵉʳ » ou
 « 2ᵈᵉ ». Titres H1 à H6, plan du manuscrit réorganisable par glisser-déposer,
 compteur de mots par chapitre, trois thèmes dont un crème moins agressif pour
-les yeux, raccourcis clavier reconfigurables, alertes de fin de session
-d'écriture et rappels par date.
+les yeux, raccourcis clavier reconfigurables et alertes de fin de session
+d'écriture.
 
 **Ne rien perdre.** Sauvegarde en **Markdown** avec métadonnées YAML — un format
 ouvert, lisible dans n'importe quel éditeur, sans enfermement propriétaire.
@@ -49,6 +49,15 @@ paragraphe pour modifié. Et si un correcteur extérieur a rendu le texte **d'un
 seul tenant**, paragraphes perdus, l'éditeur le voit, compare alors phrase par
 phrase, et sait **rendre au manuscrit le découpage de la version précédente**,
 titres compris, sans toucher au texte corrigé.
+
+**Suivre son projet.** Une feuille de route : les parties prévues, dans
+l'ordre voulu, avec un résumé libre, les fiches qui les concernent et une
+échéance facultative. Une partie existe **avant** le chapitre qui l'accueillera
+— on note une scène quand elle vient. Rattachée à un chapitre, elle affiche
+alors l'avancement **lu dans le manuscrit** : un pourcentage saisi à la main
+est faux dès le lendemain. Le suivi est lu à l'ouverture, puis se rappelle à
+vous à l'approche d'une échéance (préavis réglable, plus un rappel
+supplémentaire au choix). Il vit à côté du manuscrit, donc il le suit partout.
 
 **Retrouver son projet ailleurs.** Synchronisation avec un serveur qu'on
 héberge soi-même — jamais obligatoire, jamais automatique par défaut. L'éditeur
@@ -102,7 +111,7 @@ notre audit, valent mieux qu'une dépendance à suivre pendant des années.
 | Couche | Rôle |
 |---|---|
 | `core/` | Logique métier : modèle de texte, historique, recherche, fiches, correcteur, comparaison. Aucune dépendance graphique. |
-| `io/` | Sérialisation : Markdown, YAML, fiches, XHTML, archives, EPUB, dictionnaires, inventaire et plan de synchronisation. |
+| `io/` | Sérialisation : Markdown, YAML, fiches, XHTML, archives, EPUB, dictionnaires, inventaire, feuille de route et plan de synchronisation. |
 | `utils/` | Transverse : UTF-8, chemins, empreintes. |
 | `net/` | Réseau : le contrat HTTP, le transport isolé derrière une interface, le client de protocole, l'exécution d'un plan. Rien au-dessus ne connaît WinHTTP. |
 | `Bridge/` | Le pont C++ ↔ JS. Ne connaît pas webview, donc testable sans interface. |
@@ -116,13 +125,13 @@ que `core/` tient sans `io/`, et `io/` sans le pont.
 
 ## Qualité
 
-**20 suites, 191 cas de tests** sans framework externe, et un audit de sécurité
+**21 suites, 200 cas de tests** sans framework externe, et un audit de sécurité
 reproductible en six étapes : compilation stricte (avertissements traités comme
 des erreurs), détecteur d'erreurs mémoire, fuzzing, fuites mémoire sur toutes
 les couches, analyse statique. Tout au vert.
 
 ```bat
-scripts\build_tests.bat        REM les 20 suites
+scripts\build_tests.bat        REM les 21 suites
 scripts\security_audit.bat     REM les 6 vérifications
 scripts\fuzz_long.bat          REM campagne de fuzzing longue
 ```

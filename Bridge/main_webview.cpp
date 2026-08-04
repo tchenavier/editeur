@@ -42,6 +42,7 @@
 #include "ManuscriptApi.h"
 #include "CompareApi.h"
 #include "ProjectApi.h"
+#include "RoadmapApi.h"
 #include "SpellApi.h"
 #include "SyncApi.h"
 #include "NativeDialog.h"
@@ -480,11 +481,14 @@ int main() {
     // Synchronisation (jalon D). Ne parle au réseau que si l'on est
     // connecté ET le projet appairé : deux conditions distinctes.
     bridge::SyncApi syncApi(connection, document);
+    // Feuille de route : ce qui est prévu, avec quels personnages, pour
+    // quand. Entièrement locale, rangée à côté du manuscrit.
+    bridge::RoadmapApi roadmapApi(document);
     if (!editorApi.registerOn(dispatcher) || !fileApi.registerOn(dispatcher) ||
         !cardApi.registerOn(dispatcher) || !exportApi.registerOn(dispatcher) ||
         !projectApi.registerOn(dispatcher) || !spellApi.registerOn(dispatcher) ||
         !compareApi.registerOn(dispatcher) || !accountApi.registerOn(dispatcher) ||
-        !syncApi.registerOn(dispatcher)) {
+        !syncApi.registerOn(dispatcher) || !roadmapApi.registerOn(dispatcher)) {
         return 1; // conflit de noms de commandes : bug de câblage, on refuse de démarrer
     }
 

@@ -496,6 +496,88 @@
   #compareNotice #compareNoticeText { flex: 1; min-width: 20rem; }
   #compareNotice strong { font-weight: 600; }
 
+  /* ---------------------------------------------------------------- */
+  /* Suivi de projet (feuille de route)                                */
+  /* ---------------------------------------------------------------- */
+  #roadmapView {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    background: var(--bg); z-index: 5;
+  }
+  #roadmapHead {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    padding: .5rem .8rem;
+    background: var(--panel); border-bottom: 1px solid var(--panel-border);
+  }
+  #roadmapHead .spacer { flex: 1; }
+  #roadmapHead button {
+    font: inherit; color: var(--fg); background: var(--btn);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .3rem .7rem; cursor: pointer;
+  }
+  #roadmapHead button:hover { background: var(--btn-hover); }
+
+  #roadmapList { overflow-y: auto; flex: 1; padding: 1rem 1.2rem 4rem; }
+  #roadmapEmpty {
+    padding: 3rem; text-align: center; color: var(--muted); font-style: italic;
+    max-width: 32rem; margin: 0 auto; line-height: 1.6;
+  }
+
+  .rm-partie {
+    border: 1px solid var(--panel-border); border-radius: 8px;
+    padding: .7rem .9rem; margin-bottom: .8rem; background: var(--panel);
+  }
+  .rm-ligne { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .rm-titre {
+    font: inherit; font-weight: 600; flex: 1; min-width: 12rem;
+    color: var(--fg); background: var(--bg);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .3rem .5rem;
+  }
+  .rm-partie select, .rm-partie input[type="text"], .rm-partie input[type="number"],
+  .rm-partie textarea {
+    font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: .3rem .5rem;
+  }
+  .rm-resume {
+    width: 100%; margin-top: .5rem; min-height: 4rem; resize: vertical;
+    font-family: Georgia, "Times New Roman", serif; line-height: 1.5;
+  }
+  .rm-meta {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin-top: .5rem; font-size: .84rem; color: var(--muted);
+  }
+  .rm-meta label { display: flex; align-items: center; gap: .3rem; }
+  .rm-outils { display: flex; gap: .3rem; }
+  .rm-outils button {
+    font: inherit; font-size: .8rem; color: var(--muted); background: transparent;
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: .15rem .45rem; cursor: pointer;
+  }
+  .rm-outils button:hover { background: var(--btn-hover); color: var(--fg); }
+
+  /* Avancement lu dans le manuscrit, jamais saisi. */
+  .rm-avancement { font-variant-numeric: tabular-nums; }
+
+  /* État d'échéance. Sobre pour ce qui est loin, net pour ce qui presse. */
+  .rm-echeance { padding: .1rem .4rem; border-radius: 4px; }
+  .rm-echeance.bientot { background: #fbeecb; color: #7a5b00; }
+  .rm-echeance.aujourdhui { background: #fbeecb; color: #7a5b00; font-weight: 600; }
+  .rm-echeance.retard { background: #f8d7da; color: #b03a2e; font-weight: 600; }
+  :root[data-theme="sombre"] .rm-echeance.bientot,
+  :root[data-theme="sombre"] .rm-echeance.aujourdhui {
+    background: #3a3120; color: #e8c877;
+  }
+  :root[data-theme="sombre"] .rm-echeance.retard { background: #3a2020; color: #ff8a7a; }
+
+  .rm-fiches { display: flex; gap: .3rem; flex-wrap: wrap; }
+  .rm-fiche {
+    font-size: .78rem; padding: .1rem .4rem; border-radius: 10px;
+    background: var(--btn); border: 1px solid var(--panel-border);
+  }
+  .rm-fiche button {
+    border: 0; background: transparent; cursor: pointer; color: var(--muted);
+    padding: 0 0 0 .2rem; font: inherit;
+  }
+
   /* Liste des changements d'une synchronisation. Volontairement sobre :
      c'est une liste qu'on parcourt, pas qu'on contemple. */
   .sync-etape {
