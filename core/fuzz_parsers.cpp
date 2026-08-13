@@ -34,6 +34,7 @@
 #include "ChangeLog.h"
 #include "Diff.h"
 #include "Epub.h"
+#include "Phonetique.h"
 #include "Speller.h"
 #include "Thesaurus.h"
 #include "MarkdownIO.h"
@@ -278,6 +279,12 @@ int main(int argc, char** argv) {
         //    une itération sur quatre suffit, comme pour les
         //    dictionnaires plus bas.
         (void)core::splitSentences(u32);
+        // La cle sonore regarde en avant et en arriere du point courant
+        // (le caractere suivant, le dernier du groupe) : meme genre de
+        // code que le decoupage en phrases, meme genre de sortie de
+        // bornes qui guette. Elle est bon marche, donc a chaque tour.
+        (void)core::phoneticKey(u32);
+        (void)core::phoneticKey(raw);
         if (i % 4 == 0) {
             (void)core::tokenizeWords(u32);
             (void)core::diffText(u32, u32.substr(0, u32.size() / 2));

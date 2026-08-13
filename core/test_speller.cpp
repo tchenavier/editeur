@@ -414,6 +414,79 @@ int main() {
         std::cout << "Test 9 OK (synonymes ecartes par l'auteur)\n";
     }
 
+    // --- Test 10 : suggestions par le SON ---
+    //
+    // Ce que la distance d'édition ne peut pas trouver. Le correcteur ne
+    // propose que les mots à UNE opération d'écart ; les fautes faites à
+    // l'oreille en valent deux ou trois, et élargir la distance
+    // noierait les bonnes propositions au lieu de les faire remonter.
+    {
+        core::Speller speller;
+        speller.setForms({
+            "cerise", "chat", "chien", "faisais", "faisait", "orthographe",
+            "philosophie", "parler", "peser", "rendait",
+        });
+        assert(speller.hasPhoneticIndex());
+
+        auto propose = [&speller](const char* mot, const char* attendu) {
+            const std::vector<std::string> liste = speller.suggest(mot, 7);
+            for (const std::string& candidat : liste) {
+                if (candidat == attendu) return true;
+            }
+            std::cout << "  (« " << mot << " » n'a pas propose « " << attendu << " » : ";
+            for (const std::string& c : liste) std::cout << c << " ";
+            std::cout << ")\n";
+            return false;
+        };
+
+        assert(propose("fesais", "faisais"));       // deux opérations d'écart
+        assert(propose("ortografe", "orthographe")); // trois
+        assert(propose("filosofie", "philosophie")); // trois
+        assert(propose("cerize", "cerise"));
+
+        // La proposition la plus proche vient EN TÊTE : celle qui sonne
+        // pareil ET qui s'écarte le moins.
+        const std::vector<std::string> pour = speller.suggest("ortografe", 7);
+        assert(!pour.empty() && pour[0] == "orthographe");
+
+        // Un mot qui ne sonne comme rien de connu ne reçoit pas de
+        // proposition fantaisiste par le son.
+        const std::vector<std::string> rien = speller.suggest("zzzzzzz", 7);
+        for (const std::string& candidat : rien) {
+            assert(candidat != "chat" && candidat != "chien");
+        }
+        std::cout << "Test 10 OK (suggestions par le son)\n";
+    }
+
+    // --- Test 11 : ne pas devenir contraignant ---
+    //
+    // Une aide qui ralentit la frappe ou qui noie l'auteur sous les
+    // propositions est pire que pas d'aide du tout. Deux garde-fous, donc,
+    // et ils se vérifient.
+    {
+        core::Speller speller;
+        // Cinquante mots qui sonnent tous pareil : le pire cas possible.
+        std::vector<std::string> formes;
+        for (int i = 0; i < 50; ++i) {
+            formes.push_back("parl" + std::string(static_cast<size_t>(i % 5) + 1, 'e') +
+                             std::to_string(i));
+        }
+        formes.push_back("parler");
+        formes.push_back("parlait");
+        speller.setForms(formes);
+
+        // Le nombre de propositions reste borné, quoi qu'il arrive.
+        const std::vector<std::string> liste = speller.suggest("parlé", 7);
+        assert(liste.size() <= 7);
+
+        // Et un correcteur sans dictionnaire ne propose rien plutôt que
+        // de planter.
+        core::Speller vide;
+        assert(!vide.hasPhoneticIndex());
+        assert(vide.suggest("fesais", 7).empty());
+        std::cout << "Test 11 OK (propositions bornees, jamais envahissantes)\n";
+    }
+
     std::cout << "Tous les tests du correcteur sont passes.\n";
     return 0;
 }

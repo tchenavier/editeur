@@ -388,7 +388,8 @@ copie.**
 | `test_htmltext` | Rendu XHTML du texte : échappement, imbrication, tailles |
 | `test_zip` | Écrivain ZIP : CRC, noms d'entrées refusés, structure binaire |
 | `test_epub` | Structure « livre », EPUB (manuscrit et bible narrative) |
-| `test_speller` | Règles d'affixes, formes fléchies, correction, synonymes |
+| `test_phonetique` | Clé sonore : fautes faites à l'oreille rapprochées, mots distincts séparés |
+| `test_speller` | Règles d'affixes, formes fléchies, correction, synonymes, suggestions par le son |
 | `test_utils` | Empreinte SHA-256 (vecteurs officiels) et identifiants de projet |
 | `test_project` | Inventaire du projet et journal des modifications |
 | `test_diff` | Alignement de deux versions, découpage en phrases |

@@ -32,6 +32,13 @@ se soulignent pendant la frappe, un clic droit propose les corrections et les
 synonymes. Un dictionnaire personnel accompagne le manuscrit — les noms inventés
 d'un roman ne figureront jamais dans un dictionnaire général.
 
+Les suggestions tiennent compte du **son**, et pas seulement des lettres. Écrire
+un mot comme on l'entend est la faute la plus courante en français, et elle
+échappe à une recherche par distance d'édition : *fesais* est à deux opérations
+de *faisais*, *ortografe* à trois de *orthographe*. Élargir la distance
+noierait les bonnes propositions ; le son, lui, est un filtre — presque rien
+d'autre ne sonne pareil.
+
 **Construire un monde.** Six types de fiches fournis, et un modèle **piloté par
 schéma** : ajouter un type de fiche ne demande aucune modification du reste du
 code, pas même de l'interface, qui génère ses formulaires à partir du schéma.

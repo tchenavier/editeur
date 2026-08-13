@@ -3,6 +3,8 @@
 
 #include "Speller.h"
 
+#include "Phonetique.h"
+
 #include "Utf8.h"
 
 #include <algorithm>
@@ -118,6 +120,22 @@ void Speller::setForms(std::vector<std::string> sortedForms) {
     if (!std::is_sorted(m_forms.begin(), m_forms.end())) {
         std::sort(m_forms.begin(), m_forms.end());
     }
+
+    // Index phonétique : une empreinte par forme, triée pour être
+    // cherchée par bissection. C'est ce qui permet de proposer « faisais »
+    // à qui écrit « fesais » — deux opérations d'écart, donc invisible
+    // pour la recherche à une opération.
+    m_phonetic.clear();
+    m_phonetic.reserve(m_forms.size());
+    for (size_t i = 0; i < m_forms.size(); ++i) {
+        const std::string key = phoneticKey(m_forms[i]);
+        if (key.empty()) continue;
+        m_phonetic.push_back({phoneticHash(key), static_cast<uint32_t>(i)});
+    }
+    std::sort(m_phonetic.begin(), m_phonetic.end(),
+              [](const PhoneticEntry& a, const PhoneticEntry& b) {
+                  return a.hash < b.hash;
+              });
 }
 
 void Speller::setReplacements(std::vector<std::pair<std::string, std::string>> pairs) {
@@ -269,6 +287,93 @@ std::vector<Speller::Misspelling> Speller::check(const std::u32string& text) con
 // Suggestions
 // ---------------------------------------------------------------------
 
+namespace {
+
+// Distance d'édition, bornée. On s'arrête dès que la ligne courante
+// dépasse la limite : inutile de calculer exactement à quel point deux
+// mots sont éloignés quand on sait déjà qu'ils le sont trop.
+size_t editDistance(const std::u32string& a, const std::u32string& b, size_t limit) {
+    if (a.size() > b.size() + limit || b.size() > a.size() + limit) return limit + 1;
+
+    std::vector<size_t> previous(b.size() + 1);
+    std::vector<size_t> current(b.size() + 1);
+    for (size_t j = 0; j <= b.size(); ++j) previous[j] = j;
+
+    for (size_t i = 1; i <= a.size(); ++i) {
+        current[0] = i;
+        size_t best = current[0];
+        for (size_t j = 1; j <= b.size(); ++j) {
+            const size_t cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+            current[j] = std::min({previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost});
+            best = std::min(best, current[j]);
+        }
+        if (best > limit) return limit + 1;
+        previous.swap(current);
+    }
+    return previous[b.size()];
+}
+
+} // namespace
+
+std::vector<std::string> Speller::soundAlike(const std::u32string& lowered) const {
+    std::vector<std::string> out;
+    if (m_phonetic.empty() || lowered.empty()) return out;
+
+    const std::string key = phoneticKey(lowered);
+    if (key.empty()) return out;
+
+    // Combien de mots peut-on regarder ? Une clé courte — « e », « la » —
+    // est partagée par des centaines de formes. On les compte, et au-delà
+    // d'un certain nombre on renonce PLUTÔT QUE DE TRIER LE DICTIONNAIRE :
+    // une clé aussi commune ne désigne rien d'utile, et le temps passé là
+    // se verrait à la frappe.
+    constexpr size_t kMaxCandidats = 120;
+
+    // Distance acceptée : proportionnelle à la longueur du mot, jamais
+    // moins de trois (« fesais » -> « faisais » en vaut deux, « ortografe »
+    // -> « orthographe » en vaut trois). Au-delà, deux mots qui riment
+    // n'ont plus rien à voir, et les proposer ferait perdre du temps à
+    // l'auteur au lieu de lui en faire gagner.
+    const size_t limite = std::max<size_t>(3, lowered.size() / 2);
+
+    const uint64_t hash = phoneticHash(key);
+    auto first = std::lower_bound(m_phonetic.begin(), m_phonetic.end(), hash,
+                                  [](const PhoneticEntry& e, uint64_t h) {
+                                      return e.hash < h;
+                                  });
+
+    std::vector<std::pair<size_t, std::string>> classes; // distance, forme
+    size_t vus = 0;
+    for (auto it = first; it != m_phonetic.end() && it->hash == hash; ++it) {
+        if (++vus > kMaxCandidats) { classes.clear(); break; }
+        if (it->form >= m_forms.size()) continue;
+
+        const std::string& forme = m_forms[it->form];
+        // L'empreinte peut mentir (deux clés différentes, même empreinte) :
+        // on vérifie la vraie clé avant de proposer quoi que ce soit.
+        if (phoneticKey(forme) != key) continue;
+
+        const std::u32string large = utils::utf8ToU32(forme);
+        if (large == lowered) continue;
+        const size_t distance = editDistance(lowered, large, limite);
+        if (distance > limite) continue;
+        classes.emplace_back(distance, forme);
+    }
+
+    // Du plus proche au plus lointain ; à distance égale, ordre du
+    // dictionnaire, pour que deux appels donnent la même liste.
+    std::sort(classes.begin(), classes.end());
+
+    // Quelques propositions, pas une page. Le reste des suggestions
+    // (édition à une opération) a encore son mot à dire.
+    constexpr size_t kMaxProposees = 4;
+    for (const auto& entree : classes) {
+        if (out.size() >= kMaxProposees) break;
+        out.push_back(entree.second);
+    }
+    return out;
+}
+
 std::vector<std::string> Speller::suggest(const std::string& word, size_t max) const {
     std::vector<std::string> out;
     if (word.empty() || m_forms.empty() || max == 0) return out;
@@ -317,7 +422,16 @@ std::vector<std::string> Speller::suggest(const std::string& word, size_t max) c
         }
     }
 
-    // 2. Une seule opération d'édition : suppression, transposition,
+    // 2. Les mots qui SONNENT pareil. C'est ce que la distance d'édition
+    //    manque : « fesais » est à deux opérations de « faisais », noyé
+    //    parmi des centaines d'autres candidats à deux opérations — mais
+    //    il n'y a presque rien d'autre qui sonne comme lui.
+    for (const std::string& candidat : soundAlike(lowered)) {
+        if (out.size() >= max) break;
+        propose(utils::utf8ToU32(candidat));
+    }
+
+    // 3. Une seule opération d'édition : suppression, transposition,
     //    remplacement, insertion. Au-delà, les propositions deviennent
     //    fantaisistes et ralentissent tout.
     const size_t n = lowered.size();

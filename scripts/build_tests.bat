@@ -80,20 +80,27 @@ cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp utils\Sha256.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_project.exe"
 if %errorlevel% neq 0 exit /b 1
 
+echo === Compilation test_phonetique ===
+cl %FLAGS% %INC% utils\Utf8.cpp core\Phonetique.cpp core\test_phonetique.cpp ^
+   /Fo"%OUT%\\" /Fe"%OUT%\test_phonetique.exe"
+if %errorlevel% neq 0 exit /b 1
+
 echo === Compilation test_speller ===
 cl %FLAGS% %INC% utils\Utf8.cpp utils\PathUtf8.cpp ^
-   io\AffixDictionary.cpp io\Thesaurus.cpp core\Speller.cpp core\test_speller.cpp ^
+   io\AffixDictionary.cpp io\Thesaurus.cpp core\Phonetique.cpp core\Speller.cpp ^
+   core\test_speller.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_speller.exe"
 if %errorlevel% neq 0 exit /b 1
 
 echo === Compilation test_diff ===
-cl %FLAGS% %INC% utils\Utf8.cpp core\Speller.cpp core\Diff.cpp core\test_diff.cpp ^
+cl %FLAGS% %INC% utils\Utf8.cpp core\Phonetique.cpp core\Speller.cpp core\Diff.cpp ^
+   core\test_diff.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_diff.exe"
 if %errorlevel% neq 0 exit /b 1
 
 echo === Compilation test_reflow ===
-cl %FLAGS% %INC% utils\Utf8.cpp core\TextModel.cpp core\Speller.cpp core\Diff.cpp ^
-   core\Reflow.cpp core\test_reflow.cpp ^
+cl %FLAGS% %INC% utils\Utf8.cpp core\TextModel.cpp core\Phonetique.cpp core\Speller.cpp ^
+   core\Diff.cpp core\Reflow.cpp core\test_reflow.cpp ^
    /Fo"%OUT%\\" /Fe"%OUT%\test_reflow.exe"
 if %errorlevel% neq 0 exit /b 1
 
@@ -152,6 +159,7 @@ call :run test_zip
 call :run test_epub
 call :run test_utils
 call :run test_project
+call :run test_phonetique
 call :run test_speller
 call :run test_diff
 call :run test_reflow

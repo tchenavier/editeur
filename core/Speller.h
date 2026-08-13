@@ -29,6 +29,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -76,14 +77,37 @@ public:
     void ignoreWord(const std::string& word);
     void clearIgnored();
 
+    // Index phonétique construit ? Utile aux tests et aux mesures : il
+    // coûte de la mémoire et du temps au chargement, on doit pouvoir
+    // vérifier ce qu'il pèse.
+    bool hasPhoneticIndex() const { return !m_phonetic.empty(); }
+
 private:
+    // Une forme du dictionnaire, rangée par le SON de son écriture.
+    //
+    // On garde l'EMPREINTE de la clé, pas la clé : 454 000 chaînes
+    // coûteraient une vingtaine de mégaoctets, ces couples en coûtent
+    // sept. Les collisions sont possibles et sans conséquence — le
+    // candidat est vérifié en recalculant sa vraie clé avant d'être
+    // proposé.
+    struct PhoneticEntry {
+        uint64_t hash = 0;
+        uint32_t form = 0;
+    };
+
     std::vector<std::string> m_forms;    // triées
     std::vector<std::string> m_personal; // triées
     std::vector<std::string> m_ignored;  // triées
     std::vector<std::pair<std::string, std::string>> m_replacements;
+    std::vector<PhoneticEntry> m_phonetic; // triées par empreinte
 
     bool inDictionaries(const std::string& word) const;
     bool knownWithCase(const std::string& word) const;
+
+    // Formes dont l'écriture sonne comme 'word', classées de la plus
+    // proche à la plus lointaine. Bornée en nombre ET en distance : une
+    // liste de cinquante mots qui riment n'aide personne.
+    std::vector<std::string> soundAlike(const std::u32string& lowered) const;
 };
 
 // --- Aides exposées pour les tests ------------------------------------
