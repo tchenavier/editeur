@@ -15,6 +15,9 @@
 //   editor.setFontSize   -> { block, pos, count, size }  (size = % de la
 //                           taille normale, 100 = normal ; remplace la
 //                           taille de la sélection, style conservé)
+//   editor.setColor      -> { block, pos, count, color }  (color = "#rrggbb"
+//                           ou "" pour revenir au défaut ; remplace la couleur
+//                           de la sélection, style et taille conservés)
 //   editor.toggleWordStyle -> { block, pos, style }  (ergonomie "par mot" :
 //                             applique/retire le style sur le mot entier
 //                             sous le curseur, cf. WordBoundary)
@@ -74,6 +77,7 @@ private:
     json applyStyle(const json& payload);
     json removeStyle(const json& payload);
     json setFontSize(const json& payload);
+    json setColor(const json& payload);
     json toggleWordStyle(const json& payload);
     json wordCount(const json& payload);
     json undoCmd(const json& payload);

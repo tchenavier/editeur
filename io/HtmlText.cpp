@@ -69,8 +69,18 @@ std::string renderBlockHtml(const core::TextBlock& block) {
             close = std::string(closeTag) + close;
         };
         using S = TextStyle;
+        // Un seul <span> extérieur porte les attributs visuels (taille +
+        // couleur), pour envelopper des styles complets et rester valide.
+        std::string spanStyle;
         if (run.sizePercent != 100) {
-            open += "<span style=\"font-size:" + emValue(run.sizePercent) + "em\">";
+            spanStyle += "font-size:" + emValue(run.sizePercent) + "em";
+        }
+        if (run.hasColor()) {
+            if (!spanStyle.empty()) spanStyle += ";";
+            spanStyle += "color:" + core::colorToHex(run.color);
+        }
+        if (!spanStyle.empty()) {
+            open += "<span style=\"" + spanStyle + "\">";
             close = "</span>" + close;
         }
         if (core::hasStyle(run.style, S::Superscript))   wrap("<sup>", "</sup>");

@@ -91,6 +91,13 @@
     border: 1px solid var(--panel-border); border-radius: 6px;
     padding: .3rem .15rem; line-height: 1;
   }
+  #colorGroup { gap: .18rem; }
+  #colorGroup .color-swatch {
+    width: 1.15rem; height: 1.15rem; min-width: 0; padding: 0;
+    border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer;
+  }
+  #colorGroup .color-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #colorGroup #colorClear { width: 1.6rem; padding: .2rem; font-size: .8rem; }
   .spacer { flex: 1; }
   #wordcount { color: var(--muted); font-size: .85rem; white-space: nowrap; }
 

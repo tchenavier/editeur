@@ -227,6 +227,70 @@ int main() {
         std::cout << "Test 11 OK (taille preservee par coupe + fusion)\n";
     }
 
+    // --- Test 12 : couleur du texte, indépendante du style et de la taille ---
+    {
+        using core::colorFromHex;
+        using core::colorToHex;
+        const uint32_t rouge = colorFromHex("#cf1124");
+        const uint32_t bleu = colorFromHex("#0a5ecc");
+        assert(rouge != 0 && bleu != 0 && rouge != bleu);
+        // Aller-retour hex : la conversion est stable.
+        assert(colorToHex(rouge) == "#cf1124");
+        assert(colorToHex(0) == "");           // couleur non définie -> vide
+        assert(colorFromHex("#abc") == 0);     // format invalide -> non définie
+        assert(colorToHex(colorFromHex("#000000")) == "#000000"); // noir explicite
+
+        Document doc;
+        doc.blocks().emplace_back();
+        core::TextBlock& b = doc.blocks()[0];
+        b.insertText(0, U"abcdef");
+        b.setColor(2, 2, rouge);                 // "cd" en rouge
+        b.applyStyle(2, 2, core::TextStyle::Bold); // ...et en gras
+        b.setFontSize(2, 2, 150);                 // ...et agrandi
+        assert(b.colorAt(1) == 0);
+        assert(b.colorAt(2) == rouge);
+        assert(b.colorAt(3) == rouge);
+        assert(b.colorAt(4) == 0);
+        // Les trois dimensions coexistent sur les mêmes caractères.
+        assert(core::hasStyle(b.styleAt(2), core::TextStyle::Bold));
+        assert(b.sizeAt(2) == 150);
+
+        // Changer la couleur ne touche ni le style ni la taille.
+        b.setColor(2, 2, bleu);
+        assert(b.colorAt(2) == bleu);
+        assert(core::hasStyle(b.styleAt(2), core::TextStyle::Bold));
+        assert(b.sizeAt(2) == 150);
+
+        // Remise à la couleur par défaut : la plage n'est pas perdue (gras+taille),
+        // seule la couleur disparaît.
+        b.setColor(0, b.length(), 0);
+        assert(b.colorAt(2) == 0);
+        assert(core::hasStyle(b.styleAt(2), core::TextStyle::Bold));
+        assert(b.sizeAt(2) == 150);
+        std::cout << "Test 12 OK (couleur independante du style et de la taille)\n";
+    }
+
+    // --- Test 13 : la couleur suit coupe ET fusion ---
+    {
+        const uint32_t vert = core::colorFromHex("#1a7f37");
+        Document doc;
+        doc.blocks().emplace_back();
+        doc.blocks()[0].insertText(0, U"un DEUX trois");
+        doc.blocks()[0].setColor(3, 4, vert); // "DEUX" en vert
+
+        doc.splitBlock(0, 8); // "un DEUX " | "trois"
+        assert(doc.blocks()[0].colorAt(3) == vert);
+        assert(doc.blocks()[0].colorAt(0) == 0);
+        assert(doc.blocks()[1].colorAt(0) == 0);
+
+        doc.mergeWithPrevious(1);
+        assert(doc.blocks().size() == 1);
+        assert(doc.blocks()[0].text() == U"un DEUX trois");
+        assert(doc.blocks()[0].colorAt(3) == vert);
+        assert(doc.blocks()[0].colorAt(8) == 0);
+        std::cout << "Test 13 OK (couleur preservee par coupe + fusion)\n";
+    }
+
     std::cout << "Tous les tests des operations de bloc sont passes.\n";
     return 0;
 }

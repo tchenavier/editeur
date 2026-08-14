@@ -112,17 +112,17 @@ void TextBlock::applyStyle(size_t pos, size_t count, TextStyle style) {
         }
         // Partie avant la zone stylée (si présente). On conserve sa taille.
         if (run.start < pos) {
-            result.push_back({run.start, pos - run.start, run.style, run.sizePercent});
+            result.push_back({run.start, pos - run.start, run.style, run.sizePercent, run.color});
         }
         // Partie chevauchante : on ajoute le nouveau style au style existant,
         // en gardant la taille de la plage d'origine.
         size_t overlapStart = std::max(run.start, pos);
         size_t overlapEnd = std::min(run.end(), rangeEnd);
         result.push_back({overlapStart, overlapEnd - overlapStart,
-                          run.style | style, run.sizePercent});
+                          run.style | style, run.sizePercent, run.color});
         // Partie après la zone stylée (si présente).
         if (run.end() > rangeEnd) {
-            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent});
+            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent, run.color});
         }
     }
 
@@ -172,14 +172,14 @@ void TextBlock::removeStyle(size_t pos, size_t count, TextStyle style) {
             continue;
         }
         if (run.start < pos) {
-            result.push_back({run.start, pos - run.start, run.style, run.sizePercent});
+            result.push_back({run.start, pos - run.start, run.style, run.sizePercent, run.color});
         }
         size_t overlapStart = std::max(run.start, pos);
         size_t overlapEnd = std::min(run.end(), rangeEnd);
         result.push_back({overlapStart, overlapEnd - overlapStart,
-                          run.style & inverse, run.sizePercent});
+                          run.style & inverse, run.sizePercent, run.color});
         if (run.end() > rangeEnd) {
-            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent});
+            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent, run.color});
         }
     }
 
@@ -212,15 +212,15 @@ void TextBlock::setFontSize(size_t pos, size_t count, uint16_t sizePercent) {
         }
         // Partie avant la zone visée : taille inchangée.
         if (run.start < pos) {
-            result.push_back({run.start, pos - run.start, run.style, run.sizePercent});
+            result.push_back({run.start, pos - run.start, run.style, run.sizePercent, run.color});
         }
-        // Partie chevauchante : nouvelle taille, style conservé.
+        // Partie chevauchante : nouvelle taille, style ET couleur conservés.
         size_t overlapStart = std::max(run.start, pos);
         size_t overlapEnd = std::min(run.end(), rangeEnd);
-        result.push_back({overlapStart, overlapEnd - overlapStart, run.style, sizePercent});
+        result.push_back({overlapStart, overlapEnd - overlapStart, run.style, sizePercent, run.color});
         // Partie après la zone visée : taille inchangée.
         if (run.end() > rangeEnd) {
-            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent});
+            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent, run.color});
         }
     }
 
@@ -268,6 +268,106 @@ uint16_t TextBlock::sizeAt(size_t pos) const {
         if (pos >= run.start && pos < run.end()) return run.sizePercent;
     }
     return 100; // hors plage : taille normale
+}
+
+// ---------------------------------------------------------------------
+// TextBlock::setColor
+// ---------------------------------------------------------------------
+// Miroir de setFontSize : on découpe les plages chevauchantes, on comble
+// les trous, puis on fusionne. La couleur REMPLACE celle de la zone visée,
+// tout en préservant le style et la taille. Une couleur 0 rétablit la
+// couleur par défaut ; les plages redevenues « par défaut » sont éliminées.
+void TextBlock::setColor(size_t pos, size_t count, uint32_t color) {
+    pos = std::min(pos, m_text.size());
+    count = std::min(count, m_text.size() - pos);
+    if (count == 0) return;
+    const size_t rangeEnd = pos + count;
+
+    std::vector<FormatRun> result;
+    result.reserve(m_runs.size() + 2);
+    for (const auto& run : m_runs) {
+        if (run.end() <= pos || run.start >= rangeEnd) {
+            result.push_back(run); // aucun chevauchement
+            continue;
+        }
+        // Partie avant la zone visée : couleur inchangée.
+        if (run.start < pos) {
+            result.push_back({run.start, pos - run.start, run.style, run.sizePercent, run.color});
+        }
+        // Partie chevauchante : nouvelle couleur, style et taille conservés.
+        size_t overlapStart = std::max(run.start, pos);
+        size_t overlapEnd = std::min(run.end(), rangeEnd);
+        result.push_back({overlapStart, overlapEnd - overlapStart, run.style, run.sizePercent, color});
+        // Partie après la zone visée : couleur inchangée.
+        if (run.end() > rangeEnd) {
+            result.push_back({rangeEnd, run.end() - rangeEnd, run.style, run.sizePercent, run.color});
+        }
+    }
+
+    // Zone non couverte par une plage existante : caractères sans style ni
+    // taille, auxquels on donne la nouvelle couleur.
+    std::vector<bool> covered(count, false);
+    for (const auto& run : result) {
+        size_t s = std::max(run.start, pos);
+        size_t e = std::min(run.end(), rangeEnd);
+        for (size_t k = s; k < e; ++k) covered[k - pos] = true;
+    }
+    size_t i = 0;
+    while (i < count) {
+        if (!covered[i]) {
+            size_t j = i;
+            while (j < count && !covered[j]) ++j;
+            result.push_back({pos + i, j - i, TextStyle::None, 100, color});
+            i = j;
+        } else {
+            ++i;
+        }
+    }
+
+    std::sort(result.begin(), result.end(),
+              [](const FormatRun& a, const FormatRun& b) { return a.start < b.start; });
+    m_runs = std::move(result);
+    mergeAdjacentRuns();
+}
+
+// ---------------------------------------------------------------------
+// TextBlock::colorAt
+// ---------------------------------------------------------------------
+uint32_t TextBlock::colorAt(size_t pos) const {
+    for (const auto& run : m_runs) {
+        if (pos >= run.start && pos < run.end()) return run.color;
+    }
+    return 0; // hors plage : couleur par défaut
+}
+
+// ---------------------------------------------------------------------
+// core::colorToHex / core::colorFromHex
+// ---------------------------------------------------------------------
+std::string colorToHex(uint32_t color) {
+    if ((color & 0xFF000000u) == 0) return ""; // couleur non définie
+    static const char* hexDigits = "0123456789abcdef";
+    std::string out = "#";
+    for (int shift = 20; shift >= 0; shift -= 4) {
+        out += hexDigits[(color >> shift) & 0xF];
+    }
+    return out;
+}
+
+uint32_t colorFromHex(const std::string& hex) {
+    size_t i = 0;
+    if (i < hex.size() && hex[i] == '#') ++i;
+    if (hex.size() - i != 6) return 0; // seul le format RRGGBB est accepté
+    uint32_t rgb = 0;
+    for (; i < hex.size(); ++i) {
+        const char c = hex[i];
+        uint32_t d;
+        if (c >= '0' && c <= '9')      d = static_cast<uint32_t>(c - '0');
+        else if (c >= 'a' && c <= 'f') d = static_cast<uint32_t>(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') d = static_cast<uint32_t>(c - 'A' + 10);
+        else return 0; // caractère non hexadécimal : couleur invalide
+        rgb = (rgb << 4) | d;
+    }
+    return 0xFF000000u | rgb; // bit de poids fort = « couleur définie »
 }
 
 // ---------------------------------------------------------------------
@@ -375,6 +475,9 @@ void Document::splitBlock(size_t index, size_t pos) {
         if (run.sizePercent != 100) {
             newBlock.setFontSize(s - pos, e - s, run.sizePercent);
         }
+        if (run.color != 0) {
+            newBlock.setColor(s - pos, e - s, run.color);
+        }
     }
 
     // Tronque le bloc d'origine, puis insère la queue juste après.
@@ -403,6 +506,9 @@ void Document::mergeWithPrevious(size_t index) {
         }
         if (run.sizePercent != 100) {
             prev.setFontSize(offset + run.start, run.length, run.sizePercent);
+        }
+        if (run.color != 0) {
+            prev.setColor(offset + run.start, run.length, run.color);
         }
     }
     m_blocks.erase(m_blocks.begin() + static_cast<std::ptrdiff_t>(index));

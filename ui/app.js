@@ -82,7 +82,7 @@ if (typeof window.cppInvoke !== "function") {
 
     const cps = (str) => Array.from(str);
     function deepCopy() {
-      return blocks.map((b) => ({ type: b.type, cells: b.cells.map((x) => ({ c: x.c, s: new Set(x.s), sz: x.sz || 100 })) }));
+      return blocks.map((b) => ({ type: b.type, cells: b.cells.map((x) => ({ c: x.c, s: new Set(x.s), sz: x.sz || 100, col: x.col || "" })) }));
     }
     function snapshot() { undoStack.push(deepCopy()); redoStack.length = 0; if (undoStack.length > 200) undoStack.shift(); }
 
@@ -93,9 +93,11 @@ if (typeof window.cppInvoke !== "function") {
       while (i < b.cells.length) {
         const s = b.cells[i].s;
         const sz = b.cells[i].sz || 100;
+        const col = b.cells[i].col || "";
         let j = i + 1;
-        while (j < b.cells.length && sameSet(b.cells[j].s, s) && (b.cells[j].sz || 100) === sz) j++;
-        if (s.size || sz !== 100) runs.push({ start: i, length: j - i, styles: [...s], size: sz });
+        while (j < b.cells.length && sameSet(b.cells[j].s, s) &&
+               (b.cells[j].sz || 100) === sz && (b.cells[j].col || "") === col) j++;
+        if (s.size || sz !== 100 || col) runs.push({ start: i, length: j - i, styles: [...s], size: sz, color: col });
         i = j;
       }
       return { type: b.type, text, runs };
@@ -274,6 +276,13 @@ if (typeof window.cppInvoke !== "function") {
         const cells = blocks[p.block].cells;
         const size = Math.max(20, Math.min(800, p.size | 0));
         for (let i = p.pos; i < p.pos + p.count && i < cells.length; i++) cells[i].sz = size;
+        return { block: serialize(blocks[p.block]) };
+      },
+      "editor.setColor": (p) => {
+        snapshot();
+        const cells = blocks[p.block].cells;
+        const col = /^#[0-9a-fA-F]{6}$/.test(p.color || "") ? p.color.toLowerCase() : "";
+        for (let i = p.pos; i < p.pos + p.count && i < cells.length; i++) cells[i].col = col;
         return { block: serialize(blocks[p.block]) };
       },
       "editor.toggleWordStyle": (p) => {
@@ -817,22 +826,24 @@ function styleTable(block) {
   const cps = cpArray(block.text);
   const masks = cps.map(() => new Set());
   const sizes = cps.map(() => 100); // taille par caractère, 100 = normal
+  const colors = cps.map(() => "");  // couleur par caractère, "" = défaut
   for (const run of block.runs) {
     for (let k = 0; k < run.length; k++) {
       const idx = run.start + k;
       if (idx < masks.length) {
         run.styles.forEach((s) => masks[idx].add(s));
         if (run.size) sizes[idx] = run.size;
+        if (run.color) colors[idx] = run.color;
       }
     }
   }
-  return { cps, masks, sizes };
+  return { cps, masks, sizes, colors };
 }
 
 function buildBlockChildren(block, index) {
-  const { cps, masks, sizes } = styleTable(block);
+  const { cps, masks, sizes, colors } = styleTable(block);
   // Détection des mentions de fiches (Phase 3) : purement visuelle, jamais
-  // écrite dans le modèle. On regroupe donc par (style, taille, mention).
+  // écrite dans le modèle. On regroupe par (style, taille, couleur, mention).
   const mentions = detectMentions(cps);
   const blockOrder = chapterOrderOfBlock(index);
   // Mots inconnus du correcteur (fin de Phase 1) : une dimension de
@@ -844,10 +855,10 @@ function buildBlockChildren(block, index) {
   while (i < cps.length) {
     let j = i + 1;
     while (j < cps.length && sameSet(masks[i], masks[j]) &&
-           sizes[i] === sizes[j] && mentions[i] === mentions[j] &&
-           faults[i] === faults[j]) j++;
+           sizes[i] === sizes[j] && colors[i] === colors[j] &&
+           mentions[i] === mentions[j] && faults[i] === faults[j]) j++;
     const text = cps.slice(i, j).join("");
-    const seg = makeSegment(text, masks[i], sizes[i]);
+    const seg = makeSegment(text, masks[i], sizes[i], colors[i]);
     if (faults[i]) seg.classList.add("faute");
     if (mentions[i]) {
       seg.classList.add("mention");
@@ -873,7 +884,7 @@ function sameSet(a, b) {
   return true;
 }
 
-function makeSegment(text, styleSet, sizePercent) {
+function makeSegment(text, styleSet, sizePercent, color) {
   let el;
   if (styleSet.has("superscript")) el = document.createElement("sup");
   else if (styleSet.has("subscript")) el = document.createElement("sub");
@@ -893,10 +904,18 @@ function makeSegment(text, styleSet, sizePercent) {
   if (sizePercent && sizePercent !== 100) {
     el.style.fontSize = (sizePercent / 100) + "em";
   }
+  // Couleur des caractères ("#rrggbb"). Sûr : c'est une valeur du modèle,
+  // affectée via la propriété style (jamais interprétée comme du balisage).
+  if (color && VALID_COLOR.test(color)) {
+    el.style.color = color;
+  }
 
   el.textContent = text;
   return el;
 }
+// Une couleur du modèle est toujours "#rrggbb" ; on la valide malgré tout
+// avant de la poser dans le style (défense en profondeur).
+const VALID_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function makeBlockElement(block, index) {
   const el = document.createElement(HEADING_TAGS[block.type] || "P");
@@ -1150,6 +1169,16 @@ function sizeAt(block, pos) {
     }
   }
   return 100;
+}
+
+// Couleur ("#rrggbb", ou "" pour la couleur par défaut) au caractère 'pos'.
+function colorAt(block, pos) {
+  for (const run of block.runs) {
+    if (pos >= run.start && pos < run.start + run.length) {
+      return run.color || "";
+    }
+  }
+  return "";
 }
 
 // =====================================================================
@@ -1888,6 +1917,28 @@ fontSizeInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); commitFontSizeInput(); fontSizeInput.blur(); }
 });
 fontSizeInput.addEventListener("change", commitFontSizeInput);
+
+// ---- Couleur du texte (palette de base) ----
+// Les pastilles sont des #toolbar button : le mousedown global (plus haut)
+// empêche le vol de focus, donc la sélection vive reste disponible. On vise
+// la même plage que la taille : sélection si présente, sinon mot sous le
+// curseur. Une couleur vide ("") rétablit la couleur par défaut.
+function applyColorToSelection(color) {
+  const target = fontSizeTargetRange();
+  if (!target || target.start === target.end) return;
+  enqueue(async () => {
+    const r = await invoke("editor.setColor", {
+      block: target.index, pos: target.start,
+      count: target.end - target.start, color,
+    });
+    applyBlockResult(target.index, r);
+    setSelectionRange(target.index, target.start, target.end);
+    refreshStatus();
+  });
+}
+document.querySelectorAll("#colorGroup .color-swatch").forEach((b) =>
+  b.addEventListener("click", () => applyColorToSelection(b.dataset.color)));
+document.getElementById("colorClear").addEventListener("click", () => applyColorToSelection(""));
 
 const blockTypeSelect = document.getElementById("blockType");
 blockTypeSelect.addEventListener("change", () => {
@@ -5135,13 +5186,14 @@ document.getElementById("exportCoverPick").addEventListener("click", async () =>
 // Rendu d'un bloc pour le livre : mêmes styles qu'à l'écran, mais sans
 // les mentions de fiches (aide à l'écriture, pas contenu du livre).
 function buildPrintBlockChildren(block) {
-  const { cps, masks, sizes } = styleTable(block);
+  const { cps, masks, sizes, colors } = styleTable(block);
   const frag = document.createDocumentFragment();
   let i = 0;
   while (i < cps.length) {
     let j = i + 1;
-    while (j < cps.length && sameSet(masks[i], masks[j]) && sizes[i] === sizes[j]) j++;
-    frag.appendChild(makeSegment(cps.slice(i, j).join(""), masks[i], sizes[i]));
+    while (j < cps.length && sameSet(masks[i], masks[j]) &&
+           sizes[i] === sizes[j] && colors[i] === colors[j]) j++;
+    frag.appendChild(makeSegment(cps.slice(i, j).join(""), masks[i], sizes[i], colors[i]));
     i = j;
   }
   return frag;

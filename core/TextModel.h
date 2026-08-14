@@ -80,20 +80,34 @@ struct FormatRun {
     // Dimension indépendante du masque de style : le gras reste un booléen,
     // la taille est une valeur.
     uint16_t sizePercent = 100;
+    // Couleur des caractères. 0 = par défaut (hérite de la couleur du thème).
+    // Sinon 0xFF000000 | RVB (24 bits) : le bit de poids fort marque « couleur
+    // définie », ce qui distingue le noir explicite (#000000 -> 0xFF000000) de
+    // l'absence de couleur (0). Autre dimension indépendante du style, comme la
+    // taille. Sérialisée en <span style="color:#rrggbb"> (cf. MarkdownIO).
+    uint32_t color = 0;
 
     size_t end() const { return start + length; }
+    bool hasColor() const { return (color & 0xFF000000u) != 0; }
 
-    // Deux plages ont « le même format » si style ET taille coïncident :
-    // seules celles-là peuvent fusionner (voir mergeAdjacentRuns).
+    // Deux plages ont « le même format » si style, taille ET couleur
+    // coïncident : seules celles-là peuvent fusionner (voir mergeAdjacentRuns).
     bool sameFormat(const FormatRun& other) const {
-        return style == other.style && sizePercent == other.sizePercent;
+        return style == other.style && sizePercent == other.sizePercent &&
+               color == other.color;
     }
     // Plage sans aucune information de mise en forme (équivalente à un
     // « trou » non stylé) : inutile de la conserver.
     bool isDefault() const {
-        return style == TextStyle::None && sizePercent == 100;
+        return style == TextStyle::None && sizePercent == 100 && color == 0;
     }
 };
+
+// Conversions couleur <-> texte, partagées par le pont et la sérialisation.
+// colorToHex : "#rrggbb" si la couleur est définie, "" sinon.
+// colorFromHex : "#rrggbb" ou "rrggbb" -> 0xFF000000|RVB ; 0 si vide/invalide.
+std::string colorToHex(uint32_t color);
+uint32_t colorFromHex(const std::string& hex);
 
 // -------------------------------------------------------------------
 // TextBlock : un paragraphe ou un titre, avec son texte et ses plages
@@ -133,11 +147,19 @@ public:
     // n'est pas un cumul). Le masque de style existant est préservé.
     void setFontSize(size_t pos, size_t count, uint16_t sizePercent);
 
+    // Fixe la couleur des caractères de [pos, pos+count) (0 = revenir à la
+    // couleur par défaut). Comme setFontSize, découpe les plages au besoin,
+    // REMPLACE la couleur, et préserve le style et la taille existants.
+    void setColor(size_t pos, size_t count, uint32_t color);
+
     // Style effectif au caractère donné (None si hors plage ou texte vide).
     TextStyle styleAt(size_t pos) const;
 
     // Taille effective (en %) au caractère donné (100 si hors plage).
     uint16_t sizeAt(size_t pos) const;
+
+    // Couleur effective au caractère donné (0 = par défaut, si hors plage).
+    uint32_t colorAt(size_t pos) const;
 
     const std::vector<FormatRun>& formatRuns() const { return m_runs; }
 

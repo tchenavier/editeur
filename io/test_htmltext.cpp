@@ -96,6 +96,25 @@ int main() {
         std::cout << "Test 6 OK (bloc vide / texte nu)\n";
     }
 
+    // --- Test 7 : couleur (seule, puis combinée à la taille et au style) ---
+    {
+        TextBlock b;
+        b.insertText(0, U"rouge");
+        b.setColor(0, 5, core::colorFromHex("#cf1124"));
+        assert(io::renderBlockHtml(b) ==
+               "<span style=\"color:#cf1124\">rouge</span>");
+
+        TextBlock b2;
+        b2.insertText(0, U"X");
+        b2.setFontSize(0, 1, 150);
+        b2.setColor(0, 1, core::colorFromHex("#0a5ecc"));
+        b2.applyStyle(0, 1, TextStyle::Bold);
+        // Un seul span extérieur (taille + couleur), le gras à l'intérieur.
+        assert(io::renderBlockHtml(b2) ==
+               "<span style=\"font-size:1.5em;color:#0a5ecc\"><strong>X</strong></span>");
+        std::cout << "Test 7 OK (couleur en export XHTML)\n";
+    }
+
     std::cout << "Tous les tests HtmlText sont passes.\n";
     return 0;
 }

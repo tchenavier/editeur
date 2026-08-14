@@ -256,9 +256,12 @@ int main(int argc, char** argv) {
             b.applyStyle(randomPos(len + 50), randomPos(len + 50), core::TextStyle::Bold);
             b.setFontSize(randomPos(len + 50), randomPos(len + 50),
                           static_cast<uint16_t>(randomPos(900)));
+            b.setColor(randomPos(len + 50), randomPos(len + 50),
+                       static_cast<uint32_t>(rng()));
             b.removeText(randomPos(len + 50), randomPos(len + 50));
             (void)b.styleAt(randomPos(len + 50));
             (void)b.sizeAt(randomPos(len + 50));
+            (void)b.colorAt(randomPos(len + 50));
             doc.splitBlock(randomPos(doc.blocks().size() + 2), randomPos(len + 50));
             doc.moveBlocks(randomPos(doc.blocks().size() + 2),
                            randomPos(doc.blocks().size() + 2),

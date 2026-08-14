@@ -682,6 +682,45 @@ int main() {
         std::cout << "Test 20 OK (taille de caracteres via le pont + undo)\n";
     }
 
+    // --- Test 20b : couleur du texte via le pont (+ undo) ---
+    {
+        core::Document doc3b;
+        doc3b.blocks().emplace_back(core::BlockType::Paragraph);
+        core::UndoManager undo3b;
+        bridge::Bridge b3b;
+        bridge::EditorApi api3b(doc3b, undo3b);
+        assert(api3b.registerOn(b3b));
+
+        call(b3b, "editor.insertText", {{"block", 0}, {"pos", 0}, {"text", "abcdef"}});
+
+        // Colore "cd" (positions 2..3) en rouge.
+        auto rc = call(b3b, "editor.setColor",
+                       {{"block", 0}, {"pos", 2}, {"count", 2}, {"color", "#cf1124"}});
+        assert(rc["ok"] == true);
+        bool foundColor = false;
+        for (const auto& run : rc["result"]["block"]["runs"]) {
+            if (run["start"] == 2 && run["length"] == 2) {
+                assert(run["color"] == "#cf1124");
+                foundColor = true;
+            }
+        }
+        assert(foundColor);
+
+        // Couleur invalide : ignorée proprement (revient au défaut, réponse OK).
+        auto rbad = call(b3b, "editor.setColor",
+                         {{"block", 0}, {"pos", 0}, {"count", 6}, {"color", "pasunecouleur"}});
+        assert(rbad["ok"] == true);
+        for (const auto& run : rbad["result"]["block"]["runs"]) {
+            assert(run["color"] == "");
+        }
+
+        // Undo : on retrouve le rouge sur "cd" (l'invalide est annulée).
+        auto ru = call(b3b, "editor.undo", {});
+        assert(ru["ok"] == true);
+        assert(ru["result"]["changed"] == true);
+        std::cout << "Test 20b OK (couleur du texte via le pont + undo)\n";
+    }
+
     // --- Test 21 : export EPUB et aperçu d'image via le pont (Phase 4) ---
     {
         core::Document doc4;

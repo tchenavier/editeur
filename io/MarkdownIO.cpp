@@ -105,23 +105,38 @@ void closeMarkers(std::u32string& out, TextStyle style) {
     if (core::hasStyle(style, S::Superscript))   out += U"</sup>";
 }
 
-// Balise ouvrante de taille : <span style="font-size:<em>em">, où <em> vaut
-// le pourcentage / 100, formaté sans zéros inutiles (140 -> "1.4",
-// 125 -> "1.25", 90 -> "0.9"). N'est émise que pour une taille != 100.
-std::u32string sizeSpanOpen(uint16_t pct) {
-    std::string em = std::to_string(pct / 100);
-    const int frac = pct % 100;
-    if (frac != 0) {
-        em += '.';
-        em += static_cast<char>('0' + frac / 10);
-        if (frac % 10 != 0) em += static_cast<char>('0' + frac % 10);
+// Vrai si la plage porte des attributs visuels de span (taille non normale
+// ou couleur définie) : c'est ce qui déclenche l'émission d'un <span>.
+bool hasSpanAttrs(uint16_t size, uint32_t color) {
+    return size != 100 || (color & 0xFF000000u) != 0;
+}
+
+// Balise ouvrante de span portant la taille ET/OU la couleur :
+// <span style="font-size:1.4em;color:#rrggbb">. La taille est en em
+// (pct/100, sans zéros inutiles : 140 -> "1.4"), la couleur en #rrggbb.
+// N'inclut que les attributs réellement définis.
+std::u32string spanOpen(uint16_t size, uint32_t color) {
+    std::string style;
+    if (size != 100) {
+        std::string em = std::to_string(size / 100);
+        const int frac = size % 100;
+        if (frac != 0) {
+            em += '.';
+            em += static_cast<char>('0' + frac / 10);
+            if (frac % 10 != 0) em += static_cast<char>('0' + frac % 10);
+        }
+        style += "font-size:" + em + "em";
     }
-    return utils::utf8ToU32("<span style=\"font-size:" + em + "em\">");
+    if ((color & 0xFF000000u) != 0) {
+        if (!style.empty()) style += ";";
+        style += "color:" + core::colorToHex(color);
+    }
+    return utils::utf8ToU32("<span style=\"" + style + "\">");
 }
 
 // Contenu en ligne d'un bloc : texte échappé + marqueurs de style + balises
-// de taille. Parcourt les plages (triées, non chevauchantes : invariant de
-// TextBlock) et comble les trous non stylés entre elles.
+// de span (taille et couleur). Parcourt les plages (triées, non
+// chevauchantes : invariant de TextBlock) et comble les trous non stylés.
 //
 // Les marqueurs de style sont émis par TRANSITION : à chaque frontière de
 // plage, on ferme uniquement les styles qui disparaissent et on ouvre ceux
@@ -129,10 +144,11 @@ std::u32string sizeSpanOpen(uint16_t pct) {
 // immédiatement suivi de "**gras italique**") collerait des marqueurs entre
 // eux ("****") et fausserait la relecture.
 //
-// La TAILLE forme la couche la plus externe : quand elle change, on referme
-// d'abord tous les styles internes et l'ancien <span>, on ouvre le nouveau
-// <span>, puis on rouvre les styles voulus. L'imbrication reste ainsi bien
-// formée (le <span> enveloppe toujours des styles complets).
+// Le SPAN (taille + couleur) forme la couche la plus externe : quand l'un de
+// ces attributs change, on referme d'abord tous les styles internes et
+// l'ancien <span>, on ouvre le nouveau <span>, puis on rouvre les styles.
+// L'imbrication reste ainsi bien formée (le <span> enveloppe toujours des
+// styles complets).
 std::u32string renderInline(const TextBlock& block) {
     const std::u32string& text = block.text();
     std::u32string out;
@@ -140,13 +156,15 @@ std::u32string renderInline(const TextBlock& block) {
 
     TextStyle curStyle = TextStyle::None;
     uint16_t curSize = 100;
-    auto transitionTo = [&out, &curStyle, &curSize](TextStyle nextStyle, uint16_t nextSize) {
-        if (nextSize != curSize) {
-            closeMarkers(out, curStyle);           // ferme tous les styles ouverts
-            if (curSize != 100) out += U"</span>"; // ferme l'ancien span de taille
-            if (nextSize != 100) out += sizeSpanOpen(nextSize);
+    uint32_t curColor = 0;
+    auto transitionTo = [&](TextStyle nextStyle, uint16_t nextSize, uint32_t nextColor) {
+        if (nextSize != curSize || nextColor != curColor) {
+            closeMarkers(out, curStyle);                       // ferme tous les styles
+            if (hasSpanAttrs(curSize, curColor)) out += U"</span>"; // ferme l'ancien span
             curSize = nextSize;
-            openMarkers(out, nextStyle);           // rouvre les styles voulus
+            curColor = nextColor;
+            if (hasSpanAttrs(curSize, curColor)) out += spanOpen(curSize, curColor);
+            openMarkers(out, nextStyle);                       // rouvre les styles voulus
             curStyle = nextStyle;
         } else {
             closeMarkers(out, curStyle & ~nextStyle); // styles qui s'arrêtent ici
@@ -158,18 +176,18 @@ std::u32string renderInline(const TextBlock& block) {
     size_t pos = 0;
     for (const auto& run : block.formatRuns()) {
         if (run.start > pos) {
-            transitionTo(TextStyle::None, 100);
+            transitionTo(TextStyle::None, 100, 0);
             out += escapeText(text.substr(pos, run.start - pos));
         }
-        transitionTo(run.style, run.sizePercent);
+        transitionTo(run.style, run.sizePercent, run.color);
         out += escapeText(text.substr(run.start, run.length));
         pos = run.end();
     }
     if (pos < text.size()) {
-        transitionTo(TextStyle::None, 100);
+        transitionTo(TextStyle::None, 100, 0);
         out += escapeText(text.substr(pos));
     }
-    transitionTo(TextStyle::None, 100); // referme tout ce qui reste ouvert
+    transitionTo(TextStyle::None, 100, 0); // referme tout ce qui reste ouvert
     return out;
 }
 
@@ -318,18 +336,21 @@ struct InlineResult {
     std::u32string text;
     std::vector<uint32_t> styles;
     std::vector<uint16_t> sizes;
+    std::vector<uint32_t> colors;
 };
 
-// Tente de lire une balise ouvrante de taille à la position 'i' (qui doit
+// Tente de lire une balise ouvrante de span à la position 'i' (qui doit
 // pointer sur '<'). En cas de succès : renvoie true, place la taille (en %,
-// bornée à [20, 800]) dans 'pctOut' et le nombre de caractères consommés
-// (balise entière, '>' compris) dans 'lenOut'. Tolérant (fichier édité à la
-// main) : ignore les espaces, accepte les unités « em » (défaut) et « % »,
-// se replie sur 100 % si « font-size » manque. Retourne false si ce n'est
-// pas une balise <span …> bien formée (le '<' sera alors traité comme un
-// caractère littéral, comme pour les autres balises non reconnues).
-bool parseSpanSizeOpen(const std::u32string& s, size_t i,
-                       uint16_t& pctOut, size_t& lenOut) {
+// bornée à [20, 800]) dans 'pctOut', la couleur (0 = absente) dans 'colorOut',
+// et le nombre de caractères consommés (balise entière, '>' compris) dans
+// 'lenOut'. Tolérant (fichier édité à la main) : ignore les espaces, accepte
+// les unités « em » (défaut) et « % », lit une couleur « color:#rrggbb ».
+// Retourne false si ce n'est pas une balise <span …> bien formée (le '<' sera
+// alors traité comme un caractère littéral, comme les autres balises).
+bool parseSpanOpen(const std::u32string& s, size_t i,
+                   uint16_t& pctOut, uint32_t& colorOut, size_t& lenOut) {
+    pctOut = 100;
+    colorOut = 0;
     if (!matchesAt(s, i, U"<span")) return false;
     size_t gt = i + 5;
     while (gt < s.size() && s[gt] != U'>') {
@@ -338,41 +359,62 @@ bool parseSpanSizeOpen(const std::u32string& s, size_t i,
     }
     if (gt >= s.size()) return false;
     lenOut = gt - i + 1;
-
     const std::u32string tag = s.substr(i, lenOut);
-    const size_t key = tag.find(U"font-size:");
-    if (key == std::u32string::npos) { pctOut = 100; return true; } // span sans taille
-    size_t k = key + 10; // longueur de "font-size:"
-    while (k < tag.size() && tag[k] == U' ') ++k;
 
-    // Nombre décimal -> partie entière + centièmes (2 décimales au plus).
-    // Calcul entier : ni std::stod (exceptions) ni flottant.
-    unsigned long whole = 0;
-    unsigned int hundredths = 0, decDigits = 0;
-    bool afterDot = false, anyDigit = false;
-    for (; k < tag.size(); ++k) {
-        const char32_t d = tag[k];
-        if (d == U'.') { if (afterDot) break; afterDot = true; continue; }
-        if (d < U'0' || d > U'9') break;
-        anyDigit = true;
-        if (!afterDot) {
-            whole = whole * 10 + static_cast<unsigned long>(d - U'0');
-            if (whole > 1000) whole = 1000; // borne de sûreté (débordement)
-        } else if (decDigits < 2) {
-            hundredths = hundredths * 10 + static_cast<unsigned int>(d - U'0');
-            ++decDigits;
+    // --- Taille (font-size:) ---
+    const size_t sizeKey = tag.find(U"font-size:");
+    if (sizeKey != std::u32string::npos) {
+        size_t k = sizeKey + 10; // longueur de "font-size:"
+        while (k < tag.size() && tag[k] == U' ') ++k;
+        // Nombre décimal -> partie entière + centièmes (2 décimales au plus).
+        // Calcul entier : ni std::stod (exceptions) ni flottant.
+        unsigned long whole = 0;
+        unsigned int hundredths = 0, decDigits = 0;
+        bool afterDot = false, anyDigit = false;
+        for (; k < tag.size(); ++k) {
+            const char32_t d = tag[k];
+            if (d == U'.') { if (afterDot) break; afterDot = true; continue; }
+            if (d < U'0' || d > U'9') break;
+            anyDigit = true;
+            if (!afterDot) {
+                whole = whole * 10 + static_cast<unsigned long>(d - U'0');
+                if (whole > 1000) whole = 1000; // borne de sûreté (débordement)
+            } else if (decDigits < 2) {
+                hundredths = hundredths * 10 + static_cast<unsigned int>(d - U'0');
+                ++decDigits;
+            }
+        }
+        if (anyDigit) {
+            if (decDigits == 1) hundredths *= 10; // "1.4" -> 40 centièmes
+            while (k < tag.size() && tag[k] == U' ') ++k;
+            unsigned long pct = (k < tag.size() && tag[k] == U'%')
+                                    ? whole + (hundredths >= 50 ? 1UL : 0UL) // % : ~ entier
+                                    : whole * 100 + hundredths;              // em (défaut)
+            if (pct < 20) pct = 20;
+            if (pct > 800) pct = 800;
+            pctOut = static_cast<uint16_t>(pct);
         }
     }
-    if (!anyDigit) { pctOut = 100; return true; }
-    if (decDigits == 1) hundredths *= 10; // "1.4" -> 40 centièmes
 
-    while (k < tag.size() && tag[k] == U' ') ++k;
-    unsigned long pct = (k < tag.size() && tag[k] == U'%')
-                            ? whole + (hundredths >= 50 ? 1UL : 0UL) // % : ~ entier
-                            : whole * 100 + hundredths;              // em (défaut)
-    if (pct < 20) pct = 20;
-    if (pct > 800) pct = 800;
-    pctOut = static_cast<uint16_t>(pct);
+    // --- Couleur (color:#rrggbb) ---
+    const size_t colorKey = tag.find(U"color:");
+    if (colorKey != std::u32string::npos) {
+        size_t k = colorKey + 6; // longueur de "color:"
+        while (k < tag.size() && tag[k] == U' ') ++k;
+        if (k < tag.size() && tag[k] == U'#') {
+            ++k;
+            std::string hex = "#";
+            for (int n = 0; n < 6 && k < tag.size(); ++n, ++k) {
+                const char32_t c = tag[k];
+                const bool isHex = (c >= U'0' && c <= U'9') ||
+                                   (c >= U'a' && c <= U'f') ||
+                                   (c >= U'A' && c <= U'F');
+                if (!isHex) break;
+                hex += static_cast<char>(c);
+            }
+            colorOut = core::colorFromHex(hex); // 0 si moins de 6 chiffres valides
+        }
+    }
     return true;
 }
 
@@ -387,10 +429,12 @@ InlineResult parseInline(const std::u32string& src) {
 
     uint32_t state = 0;
     uint16_t curSize = 100;
-    auto append = [&out, &state, &curSize](char32_t c) {
+    uint32_t curColor = 0;
+    auto append = [&out, &state, &curSize, &curColor](char32_t c) {
         out.text += c;
         out.styles.push_back(state);
         out.sizes.push_back(curSize);
+        out.colors.push_back(curColor);
     };
 
     struct HtmlTag { const char32_t* text; uint32_t bit; bool closing; };
@@ -455,17 +499,20 @@ InlineResult parseInline(const std::u32string& src) {
         }
 
         if (c == U'<') {
-            // Balise de taille : <span style="font-size:…em"> … </span>.
+            // Balise de span (taille et/ou couleur) : <span style="…"> … </span>.
             // Traitée en couche externe, en amont des balises de style.
             if (matchesAt(src, i, U"</span>")) {
-                curSize = 100; // fin d'une zone agrandie/réduite
+                curSize = 100;  // fin d'une zone agrandie/réduite
+                curColor = 0;   // ...et recolorée
                 i += 7;
                 continue;
             }
             uint16_t spanPct = 100;
+            uint32_t spanColor = 0;
             size_t spanLen = 0;
-            if (parseSpanSizeOpen(src, i, spanPct, spanLen)) {
+            if (parseSpanOpen(src, i, spanPct, spanColor, spanLen)) {
                 curSize = spanPct;
+                curColor = spanColor;
                 i += spanLen;
                 continue;
             }
@@ -520,6 +567,18 @@ TextBlock buildBlock(BlockType type, const std::string& rawContent) {
             block.setFontSize(s, j - s, sz);
         }
         s = j;
+    }
+
+    // Enfin les couleurs, par plages de caractères de même couleur.
+    size_t c = 0;
+    while (c < inl.colors.size()) {
+        const uint32_t col = inl.colors[c];
+        size_t j = c;
+        while (j < inl.colors.size() && inl.colors[j] == col) ++j;
+        if (col != 0) {
+            block.setColor(c, j - c, col);
+        }
+        c = j;
     }
     return block;
 }

@@ -325,6 +325,34 @@ int main() {
         std::cout << "Test 10 OK (taille fractionnaire + remise a zero)\n";
     }
 
+    // --- Test 11 : couleur du texte, aller-retour (+ combinée à taille/style) ---
+    {
+        const uint32_t rouge = core::colorFromHex("#cf1124");
+        Document doc;
+        TextBlock para;
+        para.insertText(0, U"Un mot rouge ici.");
+        para.setColor(3, 9, rouge);                 // "mot rouge"
+        para.applyStyle(3, 3, TextStyle::Bold);      // "mot" aussi en gras
+        para.setFontSize(7, 5, 150);                 // "rouge" aussi agrandi
+        doc.blocks().push_back(para);
+
+        const std::string md = io::serialize(doc);
+        assert(md.find("color:#cf1124") != std::string::npos);
+        // Taille et couleur voyagent dans le MÊME span.
+        assert(md.find("font-size:1.5em;color:#cf1124") != std::string::npos);
+
+        const Document back = io::parse(md);
+        const TextBlock& b = back.blocks()[0];
+        assert(b.text() == U"Un mot rouge ici.");
+        assert(b.colorAt(3) == rouge);   // début de "mot"
+        assert(b.colorAt(11) == rouge);  // fin de "rouge"
+        assert(b.colorAt(2) == 0);       // espace avant : couleur par défaut
+        assert(b.colorAt(12) == 0);      // espace après
+        assert(core::hasStyle(b.styleAt(3), TextStyle::Bold)); // le gras survit
+        assert(b.sizeAt(7) == 150);                            // la taille survit
+        std::cout << "Test 11 OK (couleur du texte, aller-retour)\n";
+    }
+
     std::cout << "Tous les tests MarkdownIO sont passes.\n";
     return 0;
 }

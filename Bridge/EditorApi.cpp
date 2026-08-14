@@ -69,7 +69,8 @@ json serializeBlock(const core::TextBlock& block) {
             {"start", run.start},
             {"length", run.length},
             {"styles", styleToNames(run.style)},
-            {"size", run.sizePercent}, // taille en % (100 = normal)
+            {"size", run.sizePercent},          // taille en % (100 = normal)
+            {"color", core::colorToHex(run.color)}, // "#rrggbb" ou "" (défaut)
         });
     }
     return {
@@ -102,6 +103,8 @@ bool EditorApi::registerOn(Bridge& bridge) {
         [this](const json& p) { return removeStyle(p); });
     ok &= bridge.registerCommand("editor.setFontSize",
         [this](const json& p) { return setFontSize(p); });
+    ok &= bridge.registerCommand("editor.setColor",
+        [this](const json& p) { return setColor(p); });
     ok &= bridge.registerCommand("editor.toggleWordStyle",
         [this](const json& p) { return toggleWordStyle(p); });
     ok &= bridge.registerCommand("editor.wordCount",
@@ -252,6 +255,29 @@ json EditorApi::setFontSize(const json& payload) {
     if (count > 0) {
         core::TextBlock before = block;
         block.setFontSize(pos, count, static_cast<uint16_t>(sizePercent));
+        m_undo.recordOther(blockIndex, std::move(before), block);
+    }
+    return {{"block", serializeBlock(block)}};
+}
+
+json EditorApi::setColor(const json& payload) {
+    auto& block = requireBlock(payload);
+    const size_t blockIndex = requireIndex(payload, "block");
+
+    const size_t pos = std::min(requireIndex(payload, "pos"), block.length());
+    const size_t count = std::min(requireIndex(payload, "count"), block.length() - pos);
+
+    // Couleur au format "#rrggbb" ; une chaîne vide (ou invalide) rétablit la
+    // couleur par défaut. colorFromHex borne tout : jamais d'accès invalide.
+    std::string hex;
+    if (payload.contains("color") && payload["color"].is_string()) {
+        hex = payload["color"].get<std::string>();
+    }
+    const uint32_t color = core::colorFromHex(hex);
+
+    if (count > 0) {
+        core::TextBlock before = block;
+        block.setColor(pos, count, color);
         m_undo.recordOther(blockIndex, std::move(before), block);
     }
     return {{"block", serializeBlock(block)}};
