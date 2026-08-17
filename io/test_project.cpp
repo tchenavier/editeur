@@ -329,15 +329,18 @@ int main() {
 
     // --- Test 9 : appairage du projet (jalon C) ---
     {
-        const fs::path manuscrit = racine / "appairage" / "roman.md";
-        fs::create_directories(manuscrit.parent_path(), ec);
+        // Nom distinct du 'manuscrit' des tests précédents (portée fonction) :
+        // une variable de même nom dans ce bloc le masquerait (avertissement
+        // C4456), ce que le projet bannit partout ailleurs.
+        const fs::path manuscritAppairage = racine / "appairage" / "roman.md";
+        fs::create_directories(manuscritAppairage.parent_path(), ec);
         {
-            std::ofstream out(manuscrit, std::ios::binary);
+            std::ofstream out(manuscritAppairage, std::ios::binary);
             out << "---\ntitle: \"Roman\"\n---\n\nTexte.\n";
         }
 
         // Jamais répondu : la question peut être posée.
-        io::Pairing initial = io::loadPairing(manuscrit);
+        io::Pairing initial = io::loadPairing(manuscritAppairage);
         assert(initial.state == io::PairingState::None);
         assert(initial.canPropose());
         assert(!initial.isPaired());
@@ -349,9 +352,9 @@ int main() {
         appaire.mode = io::PairingMode::ReadOnly;
         appaire.server = "https://exemple.fr";
         std::string err;
-        assert(io::savePairing(appaire, manuscrit, &err));
+        assert(io::savePairing(appaire, manuscritAppairage, &err));
 
-        const io::Pairing relu = io::loadPairing(manuscrit);
+        const io::Pairing relu = io::loadPairing(manuscritAppairage);
         assert(relu.isPaired());
         assert(relu.server == "https://exemple.fr");
         assert(relu.mode == io::PairingMode::ReadOnly);
@@ -362,9 +365,9 @@ int main() {
         // lassitude.
         io::Pairing jamais;
         jamais.state = io::PairingState::Never;
-        assert(io::savePairing(jamais, manuscrit, &err));
-        assert(io::loadPairing(manuscrit).state == io::PairingState::Never);
-        assert(!io::loadPairing(manuscrit).canPropose());
+        assert(io::savePairing(jamais, manuscritAppairage, &err));
+        assert(io::loadPairing(manuscritAppairage).state == io::PairingState::Never);
+        assert(!io::loadPairing(manuscritAppairage).canPropose());
 
         // Lecture tolérante : fichier abîmé, absent, ou incohérent.
         assert(io::parsePairing("").state == io::PairingState::None);

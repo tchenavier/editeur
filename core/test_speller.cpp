@@ -487,6 +487,34 @@ int main() {
         std::cout << "Test 11 OK (propositions bornees, jamais envahissantes)\n";
     }
 
+    // --- Test 12 : les deux sources de suggestion COEXISTENT ---
+    //
+    // Piège de conception classique (vu ailleurs) : la couche phonétique qui
+    // court-circuiterait la distance d'édition — dès qu'un homophone est
+    // trouvé, la recherche à une opération n'est plus exécutée, et une bonne
+    // correction disparaît. Ici, les deux doivent alimenter le MÊME vivier.
+    //
+    // « apart » a pour clé sonore « apar ». On met dans le dictionnaire :
+    //   - « part »   : à UNE suppression (le « a » initial), mais de clé
+    //                  « par » — donc joignable UNIQUEMENT par la distance
+    //                  d'édition (la phonétique ne le voit pas) ;
+    //   - « appare » : clé « apar » (même son) mais à DEUX opérations — donc
+    //                  joignable UNIQUEMENT par le son (les pas d'édition ne
+    //                  font qu'une opération).
+    // Si la phonétique court-circuitait l'édition, « part » disparaîtrait.
+    {
+        core::Speller speller;
+        speller.setForms({"appare", "part"}); // triés
+        assert(speller.hasPhoneticIndex());
+
+        const std::vector<std::string> s = speller.suggest("apart", 7);
+        // La correction par distance d'édition n'est PAS exclue par le son.
+        assert(contains(s, "part"));
+        // La correction par le son est là aussi : les deux sources coexistent.
+        assert(contains(s, "appare"));
+        std::cout << "Test 12 OK (phonetique et edition alimentent le meme vivier)\n";
+    }
+
     std::cout << "Tous les tests du correcteur sont passes.\n";
     return 0;
 }

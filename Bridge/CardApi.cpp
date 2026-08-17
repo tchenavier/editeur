@@ -302,10 +302,15 @@ json CardApi::remove(const json& payload) {
     const bool removed = m_library.remove(id, /*purgeReferences=*/true, &m_registry);
 
     m_cardTokens.erase(id);
-    // Les fiches dont les références ont changé doivent être réécrites.
+    // Les fiches dont les références ont changé doivent être réécrites. Comme
+    // partout ailleurs (save, saveAll), un échec d'écriture est signalé et non
+    // avalé : sinon la suppression paraîtrait réussie alors que le disque
+    // garderait des liens morts vers la fiche supprimée.
     if (removed && !m_root.empty()) {
         std::string error;
-        io::saveLibrary(m_library, m_root, &error, &m_registry);
+        if (!io::saveLibrary(m_library, m_root, &error, &m_registry)) {
+            throw std::runtime_error(error);
+        }
         recordAllTokens(); // leurs dates ont changé
     }
     return {{"removed", removed}};
